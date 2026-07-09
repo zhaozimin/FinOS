@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>财务管理系统 · 完整使用指南（4 Phase / 16 功能）</title>
+<style>
+  :root {
+    --bg: #f7f2ea;
+    --fg: #1f1f1d;
+    --card: #fbf8f1;
+    --muted: #6f6a61;
+    --border: #ddd2c3;
+    --accent: #c96442;
+    --accent-soft: rgba(201, 100, 66, 0.1);
+    --success: #477d62;
+    --success-soft: rgba(71, 125, 98, 0.1);
+    --warning: #b17824;
+    --warning-soft: rgba(177, 120, 36, 0.12);
+    --info: #4a6ba0;
+    --info-soft: rgba(74, 107, 160, 0.1);
+    --serif: Baskerville, "Times New Roman", "Source Han Serif SC", "Noto Serif SC", Georgia, serif;
+    --sans: "Inter", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--fg);
+    background:
+      linear-gradient(180deg, color-mix(in oklab, var(--bg) 92%, #ead6bf) 0%, var(--bg) 320px),
+      var(--bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .container {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 60px 32px 120px;
+  }
+
+  /* —— Hero —— */
+  header.hero {
+    margin-bottom: 56px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-size: 46px;
+    line-height: 1.1;
+    margin: 0 0 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .lede {
+    font-size: 17px;
+    color: var(--muted);
+    max-width: 64ch;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-top: 24px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .meta span strong {
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  /* —— Overview —— */
+  .overview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 40px;
+  }
+  .overview-card {
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .overview-card .num {
+    font-family: var(--serif);
+    font-size: 32px;
+    line-height: 1;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .overview-card .lbl {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+
+  /* —— Quickstart —— */
+  .quickstart {
+    background: linear-gradient(135deg, color-mix(in oklab, var(--card) 92%, var(--accent)) 0%, var(--card) 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 26px;
+    margin-bottom: 56px;
+  }
+  .quickstart h2 {
+    font-size: 22px;
+    margin: 0 0 12px;
+  }
+  .quickstart .row {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 12px;
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+  .quickstart .row .step {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* —— Phase Nav —— */
+  .phase-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 32px 0 56px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.45);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .phase-nav a {
+    text-decoration: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--card);
+    border: 1px solid var(--border);
+    transition: all 0.15s;
+  }
+  .phase-nav a:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* —— Phase Header —— */
+  .phase {
+    margin-top: 80px;
+    margin-bottom: 28px;
+    padding: 24px 28px;
+    background: linear-gradient(135deg, color-mix(in oklab, var(--accent) 12%, var(--card)) 0%, var(--card) 80%);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    scroll-margin-top: 24px;
+  }
+  .phase .ph {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .phase h2 {
+    font-family: var(--serif);
+    font-size: 30px;
+    margin: 0 0 6px;
+    font-weight: 600;
+  }
+  .phase p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14.5px;
+  }
+
+  /* —— Sections —— */
+  section.feature {
+    margin-bottom: 44px;
+    padding: 24px 28px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    scroll-margin-top: 24px;
+  }
+  .feature-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+  }
+  h3.feature-title {
+    font-family: var(--serif);
+    font-size: 24px;
+    line-height: 1.2;
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  h4 {
+    font-size: 14px;
+    font-weight: 650;
+    margin: 20px 0 8px;
+    line-height: 1.4;
+    color: var(--fg);
+  }
+  section.feature p, section.feature ul, section.feature ol {
+    margin: 0 0 12px;
+  }
+  section.feature ul, section.feature ol {
+    padding-left: 22px;
+  }
+  section.feature ul li, section.feature ol li {
+    margin-bottom: 5px;
+  }
+  code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: rgba(0,0,0,0.05);
+    padding: 1.5px 5px;
+    border-radius: 3px;
+  }
+  kbd {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    background: rgba(0,0,0,0.05);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    padding: 1.5px 6px;
+    border-radius: 4px;
+    color: var(--fg);
+  }
+
+  /* —— Steps box —— */
+  .try-box {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 4px 8px 8px 4px;
+    padding: 16px 20px;
+    margin: 16px 0;
+  }
+  .try-box .label {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .try-box ol {
+    margin: 4px 0 0;
+    padding-left: 20px;
+  }
+  .try-box ol li {
+    margin-bottom: 4px;
+  }
+  .try-box.success {
+    border-left-color: var(--success);
+    background: var(--success-soft);
+  }
+  .try-box.success .label { color: var(--success); }
+
+  .tip {
+    font-size: 13px;
+    background: var(--info-soft);
+    border-left: 3px solid var(--info);
+    padding: 10px 14px;
+    border-radius: 4px;
+    margin: 12px 0;
+    color: color-mix(in oklab, var(--info) 80%, var(--fg));
+  }
+
+  /* —— Mock cards —— */
+  .mock {
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.4);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 14px 0;
+    font-size: 13px;
+  }
+  .mock-bar {
+    height: 8px;
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 99px;
+    overflow: hidden;
+    margin: 6px 0;
+  }
+  .mock-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: 99px;
+  }
+  .ring {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: conic-gradient(var(--success) 0% 65%, rgba(0,0,0,0.08) 65% 100%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--success);
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 14px;
+    position: relative;
+  }
+  .ring::before {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    background: var(--card);
+    border-radius: 50%;
+  }
+  .ring span {
+    position: relative;
+    z-index: 1;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-size: 11.5px;
+    font-weight: 500;
+  }
+  .badge.success { background: var(--success-soft); color: var(--success); }
+  .badge.warning { background: var(--warning-soft); color: var(--warning); }
+  .badge.info    { background: var(--info-soft);    color: var(--info); }
+  .badge.accent  { background: var(--accent-soft);  color: var(--accent); }
+  .badge.neutral { background: rgba(0,0,0,0.06);    color: var(--muted); }
+
+  .mono-cap {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* —— Bar chart mock —— */
+  .bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    height: 100px;
+    padding: 8px 0;
+  }
+  .bars .col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .bars .col .bar-pair {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 80px;
+  }
+  .bars .col .b {
+    width: 12px;
+    border-radius: 2px 2px 0 0;
+  }
+  .bars .col .b.actual {
+    background: var(--warning);
+  }
+  .bars .col .b.budget {
+    background: transparent;
+    border: 1.5px dashed var(--warning);
+  }
+  .bars .col .b.actual.green { background: var(--success); }
+  .bars .col .b.budget.green { border-color: var(--success); }
+  .bars .col .lbl {
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+
+  /* —— Kbd palette mock —— */
+  .palette-mock {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    padding: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+  }
+  .palette-mock .input {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .palette-mock .group-label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 6px 8px 2px;
+  }
+  .palette-mock .row-item {
+    padding: 6px 8px;
+    display: flex;
+    gap: 8px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  .palette-mock .row-item:hover {
+    background: rgba(0,0,0,0.04);
+  }
+
+  /* —— Footer next —— */
+  .next {
+    margin-top: 80px;
+    padding: 32px 28px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 10px;
+    text-align: center;
+  }
+  .next h2 {
+    font-family: var(--serif);
+    font-size: 26px;
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  .next p {
+    color: var(--muted);
+    max-width: 56ch;
+    margin: 0 auto 20px;
+  }
+  .next a {
+    display: inline-block;
+    padding: 10px 22px;
+    background: var(--accent);
+    color: #fff;
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: opacity 0.15s;
+  }
+  .next a:hover { opacity: 0.85; }
+
+  hr.soft {
+    border: 0;
+    border-top: 1px dashed var(--border);
+    margin: 24px 0;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="hero">
+  <span class="eyebrow">用户使用指南 · v2.0</span>
+  <h1>财务管理系统 · 完整功能手册</h1>
+  <p class="lede">
+    本地优先的双用途财务工作台 — 既能记日常生活账，也能跑个人创业者经营记账。这份手册覆盖 4 个 Phase 共 16 项功能，每项都附"上手三步"，跟着做就能用起来。
+  </p>
+  <div class="meta">
+    <span>访问地址 <strong>http://127.0.0.1:31889/dashboard/</strong></span>
+    <span>本位币 <strong>CNY</strong></span>
+    <span>主题 <strong>71 套可切</strong></span>
+  </div>
+</header>
+
+<section>
+  <div class="overview-grid">
+    <div class="overview-card">
+      <div class="num">4</div>
+      <div class="lbl">Phase 全部完成<br/>P1 / P2 / P3 / P4</div>
+    </div>
+    <div class="overview-card">
+      <div class="num">16</div>
+      <div class="lbl">个功能 ship<br/>从基建到全局视图</div>
+    </div>
+    <div class="overview-card">
+      <div class="num">9</div>
+      <div class="lbl">个设置面板<br/>从币种汇率到税务</div>
+    </div>
+    <div class="overview-card">
+      <div class="num">9</div>
+      <div class="lbl">个仪表盘 widget<br/>可显隐 + 排序</div>
+    </div>
+  </div>
+
+  <div class="quickstart">
+    <h2>3 分钟快速上手</h2>
+    <div class="row"><span class="step">①</span><span><strong>建账户</strong> · 进「财务设置 → 账户管理」，加你常用的卡 / 微信 / 支付宝。区分"工作 / 生活"归属，资产 vs 负债。</span></div>
+    <div class="row"><span class="step">②</span><span><strong>填当前余额</strong> · 直接输入卡里现在有多少钱（不是初始余额）。差额会自动记成"余额调整"交易。</span></div>
+    <div class="row"><span class="step">③</span><span><strong>开始记账</strong> · 「资金流水 → 新增交易」。系统会按关键词自动猜分类，你只需确认。</span></div>
+    <div class="row"><span class="step">★</span><span><strong>进阶</strong> · 加分类预算（P2-1.1）、设周期账目（P2-1.2）、给项目设预算（P3-2.1）、按 <kbd>⌘K</kbd> 全局搜索（P4-3.2）。</span></div>
+  </div>
+
+  <nav class="phase-nav">
+    <a href="#p1">P1 · 基建打底</a>
+    <a href="#p2">P2 · 日常记账增强</a>
+    <a href="#p3">P3 · 创业者业务</a>
+    <a href="#p4">P4 · 全局视图</a>
+  </nav>
+</section>
+
+<!-- ============ PHASE 1 ============ -->
+<div id="p1" class="phase">
+  <div class="ph">Phase 1</div>
+  <h2>基建打底</h2>
+  <p>资金状况 + 数据底座 — 先把"账户怎么算"和"附件怎么挂"做对，后面所有功能都建立在这上面。</p>
+</div>
+
+<section class="feature">
+  <span class="feature-tag">P1 · 1.5</span>
+  <h3 class="feature-title">资产 / 负债 + 信用卡额度</h3>
+  <p>账户分两类：<strong>资产</strong>（卡里的钱、零钱）和<strong>负债</strong>（信用卡欠款、贷款）。净资产 = 资产 − 负债，会显示在「财务状况」顶部 KPI。</p>
+  <div class="mock">
+    <div style="display: flex; gap: 16px; align-items: center;">
+      <div style="width: 44px; height: 44px; background: #4a6ba0; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff;">💳</div>
+      <div style="flex: 1;">
+        <div style="font-weight: 600; margin-bottom: 4px;">招商信用卡 <span class="badge warning" style="margin-left: 6px;">负债</span></div>
+        <div class="mono-cap">已用 ¥3,820 / ¥30,000 · 可用 ¥26,180</div>
+        <div class="mock-bar" style="margin-top: 6px; background: rgba(177,120,36,0.2);"><span style="width: 13%; background: var(--warning);"></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>进「财务设置 → 账户管理」，新增账户。</li>
+      <li>「性质」选<strong>负债（信用卡 / 贷款）</strong>；类型选信用卡。</li>
+      <li>填「信用额度」（如 ¥30,000）和「当前已欠」（如 ¥3,820）→ 卡片底部出现进度条。</li>
+    </ol>
+  </div>
+</section>
+
+<section class="feature">
+  <span class="feature-tag">P1 · 2.6</span>
+  <h3 class="feature-title">余额调整审计 — 黑洞资金</h3>
+  <p>用户在设置页改"当前余额"时，系统会<strong>自动写一条「余额调整」交易</strong>补差。意思是：你直接说"现在卡里有 ¥1234"，但实际记账推算出 ¥1180，那 ¥54 的差额会被记成 income/expense，带 <code>余额调整 · 黑洞资金</code> 标签，永不被吞掉。</p>
+  <div class="tip">这套机制让"账实不符"变成可见 + 可追溯的交易，而不是悄悄改 openingBalance。</div>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>进「财务设置 → 账户管理」，找一个账户，改「当前余额」字段。</li>
+      <li>右上角点「保存设置」。</li>
+      <li>切到「资金流水」，搜索 <code>余额调整</code> 看到自动生成的交易。</li>
+    </ol>
+  </div>
+</section>
+
+<section class="feature">
+  <span class="feature-tag">P1 · 1.6</span>
+  <h3 class="feature-title">附件 + 👁 眼睛图标</h3>
+  <p>每条交易可以挂多张图片 / PDF（单张 ≤ 10 MB），如发票照、收据扫描。流水表行末有眼睛图标，点击全屏查看（支持 <kbd>←</kbd> <kbd>→</kbd> <kbd>Esc</kbd>）。</p>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>「资金流水」点任意一条交易 → 弹出「编辑交易」。</li>
+      <li>在「附件 / 发票」区点「添加附件」上传图片。</li>
+      <li>保存后回流水列表，行末眼睛图标出现，点击查看。</li>
+    </ol>
+  </div>
+</section>
+
+<section class="feature">
+  <span class="feature-tag">P1 · 2.4</span>
+  <h3 class="feature-title">客户 / 合作方名册</h3>
+  <p>登记长期合作的客户、供应商、雇主。登记后在交易上挂"对手方"字段，方便回款查询和归账。</p>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>进「财务设置 → 客户与合作方」，点新增对手方。</li>
+      <li>填名称、类型（客户 / 供应商 / 雇主 / 其他）、默认结算账户。</li>
+      <li>下次记账时在「对手方 / 客户」下拉选中，自动归账。</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ PHASE 2 ============ -->
+<div id="p2" class="phase">
+  <div class="ph">Phase 2</div>
+  <h2>日常记账增强</h2>
+  <p>把"减少手输 + 个人理财核心"做扎实 — 预算、周期账目、储蓄目标、账单一键导入。</p>
+</div>
+
+<section class="feature">
+  <span class="feature-tag">P2 · 1.1</span>
+  <h3 class="feature-title">预算管理</h3>
+  <p>给支出分类设月度预算，超过 80% 变黄、超过 100% 变红。「财务状况」页有总览，「资金流水」筛选支出时顶部还有 mini 进度条。</p>
+  <div class="mock">
+    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+      <span><span style="display: inline-block; width: 8px; height: 8px; background: #FF8C42; border-radius: 50%; margin-right: 6px;"></span><strong>外卖饮食</strong></span>
+      <span class="badge warning">86.4%</span>
+    </div>
+    <div class="mock-bar" style="background: rgba(177,120,36,0.15);"><span style="width: 86%; background: var(--warning);"></span></div>
+    <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--muted);">
+      <span>已花 ¥432 / ¥500</span>
+      <span style="color: var(--warning);">剩余 ¥68</span>
+    </div>
+  </div>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>进「财务设置 → 类别管理」，找一个支出分类。</li>
+      <li>在「月度预算」字段填金额（如 ¥500），保存。</li>
+      <li>切到「财务状况」首屏，看「预算进度」卡片。</li>
+    </ol>
+  </div>
+</section>
+
+<section class="feature">
+  <span class="feature-tag">P2 · 1.2</span>
+  <h3 class="feature-title">周期性交易（订阅 / 房租 / 工资）</h3>
+  <p>按日 / 周 / 月 / 年自动生成交易。设了"每月 1 号 ¥1500 房租"后，每月 1 号系统会自动写一条 expense。每次刷新页面都会扫一次到期规则（30 秒 debounce）。</p>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>进「财务设置 → 周期账目」，点「新增规则」。</li>
+      <li>填名称（如 "Netflix"）、金额、类型、账户、分类、频率（每月 / 每周等）。</li>
+      <li>设「下次触发」为今天或之前，保存后 → 立刻生成第一条交易。</li>
+    </ol>
+  </div>
+  <div class="tip">生成的交易带 <code>source='recurring'</code> + <code>周期账目</code> 标签，可在「资金流水」搜索过滤。</div>
+</section>
+
+<section class="feature">
+  <span class="feature-tag">P2 · 1.3</span>
+  <h3 class="feature-title">储蓄目标</h3>
+  <p>给项目设目标金额 + 截止日期，财务状况首屏显示进度圆环：&lt; 30% 蓝、30-60% 黄、≥ 60% 绿。逾期未达目标显示红色警告。</p>
+  <div class="mock" style="display: flex; gap: 16px; align-items: center;">
+    <div class="ring"><span>65%</span></div>
+    <div>
+      <div style="font-weight: 600;">买台新电脑</div>
+      <div class="mono-cap" style="margin-top: 2px;">¥6,500 / ¥10,000 · 剩 32 天</div>
+    </div>
+  </div>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>进「财务设置 → 项目管理」，找或建一个项目。</li>
+      <li>展开「储蓄目标」折叠区，填目标金额 + 目标日期。</li>
+      <li>可选：选「资金来自账户」，让进度按账户余额算（否则按项目下的 income 累加）。</li>
+    </ol>
+  </div>
+</section>
+
+<section class="feature">
+  <span class="feature-tag">P2 · 1.4</span>
+  <h3 class="feature-title">账单导入（微信 / 支付宝 / 招行 / 通用 CSV）</h3>
+  <p>三步向导：<strong>选模板 + 上传</strong> → <strong>预览编辑</strong> → <strong>提交</strong>。系统按列名智能识别（日期 / 金额 / 对方 / 备注），并按你账户和分类的 keywords 自动匹配。</p>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>进「财务设置 → 账单导入」，选模板（首次推荐"通用 CSV"），上传文件。</li>
+      <li>预览表会展示解析结果，已自动匹配的分类 / 账户可勾选 / 编辑 / 跳过。</li>
+      <li>点「确认导入」批量入库，结果弹窗显示成功 / 失败数。</li>
+    </ol>
+  </div>
+  <div class="tip">支持 GBK / UTF-8 / GB18030 自动识别，国内银行流水基本不用转码。</div>
+</section>
+
+<!-- ============ PHASE 3 ============ -->
+<div id="p3" class="phase">
+  <div class="ph">Phase 3</div>
+  <h2>创业者业务</h2>
+  <p>项目预算 + 发票 + 税务 + 项目 P&L — 把"经营记账"四件套做齐。</p>
+</div>
+
+<section class="feature">
+  <span class="feature-tag">P3 · 2.1</span>
+  <h3 class="feature-title">项目预算 — 实心 vs 描边双柱</h3>
+  <p>给项目设「预算成本」+「期望收入」后，「财务状况」的项目柱状图会切到 4 柱模式：实心 = 实际，描边虚心 = 预算。tooltip 显示完成度百分比。</p>
+  <div class="mock">
+    <div class="bars">
+      <div class="col">
+        <div class="bar-pair">
+          <span class="b actual" style="height: 50%;"></span>
+          <span class="b budget" style="height: 70%;"></span>
+        </div>
+        <span class="lbl">公司运营</span>
+      </div>
+      <div class="col">
+        <div class="bar-pair">
+          <span class="b actual green" style="height: 30%;"></span>
+          <span class="b budget green" style="height: 60%;"></span>
+        </div>
+        <span class="lbl">A 客户项目</span>
+      </div>
+      <div class="col">
+        <div class="bar-pair">
+          <span class="b actual" style="height: 75%;"></span>
+          <span class="b budget" style="height: 50%;"></span>
+        </div>
+        <span class="lbl">B 客户项目</span>
+      </div>
+    </div>
+    <div class="mono-cap" style="text-align: center; margin-top: 4px;">实心 = 实际 · 描边 = 预算 / 期望</div>
+  </div>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>进「财务设置 → 项目管理」，展开任意项目的「项目预算 / 期望」折叠区。</li>
+      <li>填预算成本 + 期望收入 + 起止日期。</li>
+      <li>切到「财务状况」看双柱图，hover 看完成度。</li>
+    </ol>
+  </div>
+</section>
+
+<section class="feature">
+  <span class="feature-tag">P3 · 2.2</span>
+  <h3 class="feature-title">发票追踪</h3>
+  <p>交易上有「已开 / 应开发票」开关。开了之后从已上传的附件里绑定一张作为"发票"。<strong>"应开但没绑"</strong>的会在流水表行末显示橙色"缺"小徽章 — 提醒你尽快补开。</p>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>编辑一条 income 交易，勾选「已开 / 应开发票」。</li>
+      <li>先上传发票图片到「附件 / 发票」区。</li>
+      <li>下方"发票"区从下拉里选这张附件作为发票绑定。保存。</li>
+    </ol>
+  </div>
+</section>
+
+<section class="feature">
+  <span class="feature-tag">P3 · 2.3</span>
+  <h3 class="feature-title">税务字段 + 报税导出</h3>
+  <p>每条交易可选「税务分类」：个人 / 经营收入 / 可抵扣支出 / 不可抵扣 / 内部往来。一键导出 5 sheet 的报税 Excel：业务收入 / 可抵扣 / 不可抵扣 / 汇总（含预估增值税 + 个税 + 社保）/ 说明。</p>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>进「财务设置 → 税务设置」，调整税率（默认中国小规模 / 个体户：3% 增值税 / 6 万年度起征点 / 20% 个税 / 10% 社保）。</li>
+      <li>编辑交易时为业务相关的项设「税务分类」（如 <em>经营收入</em> / <em>可抵扣支出</em>）。</li>
+      <li>回「税务设置」面板，选年度 + 季度，点「下载报税表」即得 xlsx。</li>
+    </ol>
+  </div>
+  <div class="tip">⚠️ 预估算法是简化版，与真实税法可能有差异。请以专业税务人员意见为准。</div>
+</section>
+
+<section class="feature">
+  <span class="feature-tag">P3 · 2.5</span>
+  <h3 class="feature-title">项目 P&L 报表</h3>
+  <p>每个项目的「查看 P&L」按钮（柱状图标）打开 720px 右抽屉：4 个 KPI（实际成本 / 实际回款 / 净利润 / 利润率）+ 月度净利润折线 + 项目所有相关流水。</p>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>进「财务设置 → 项目管理」。</li>
+      <li>找一个项目卡片，点击右上角的<strong>📊 柱状图标</strong>。</li>
+      <li>抽屉打开后查看 KPI、折线、流水。<kbd>Esc</kbd> 关闭。</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ PHASE 4 ============ -->
+<div id="p4" class="phase">
+  <div class="ph">Phase 4</div>
+  <h2>全局视图</h2>
+  <p>多币种 + 现金流预测 + 全局搜索 + 仪表盘可定制 — 把整个系统装上"上帝视角"。</p>
+</div>
+
+<section class="feature">
+  <span class="feature-tag">P4 · 1.8</span>
+  <h3 class="feature-title">现金流预测 + 月度订阅</h3>
+  <p>基于「周期账目」(P2-1.2) 推算未来 30 / 60 / 90 天的累计净流入折线，画在「财务状况」首页。旁边的「月度订阅」卡片按金额倒序列出所有月度支出规则，并算出年化合计。</p>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>先在「周期账目」面板加几条规则（订阅 / 工资 / 房租等）。</li>
+      <li>切到「财务状况」首页，向下找到「现金流预测」+「月度订阅」并排两张卡。</li>
+      <li>切换 30 / 60 / 90 天，看累计净额折线如何变化。</li>
+    </ol>
+  </div>
+</section>
+
+<section class="feature">
+  <span class="feature-tag">P4 · 3.2</span>
+  <h3 class="feature-title">全局搜索 — <kbd>⌘K</kbd></h3>
+  <p>任意页面按 <kbd>⌘K</kbd>（Mac）或 <kbd>Ctrl+K</kbd>（Win），居中弹出搜索面板。同时搜 5 类：交易 / 账户 / 项目 / 分类 / 对手方。点交易 → 跳转流水页并预填搜索词；点账户/项目/分类/对手方 → 跳转设置页并切换到对应面板。</p>
+  <div class="palette-mock">
+    <div class="input">
+      <span>🔍 搜索：外卖</span>
+      <kbd>⌘K</kbd>
+    </div>
+    <div class="group-label">交易</div>
+    <div class="row-item">↗ 饿了么 · 2026-04-21 · ¥68.00</div>
+    <div class="row-item">↗ 美团外卖 · 2026-04-19 · ¥35.00</div>
+    <div class="group-label">分类</div>
+    <div class="row-item">🏷 外卖饮食 · 支出 · 餐, 饭, 外卖</div>
+  </div>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>任意页面按 <kbd>⌘K</kbd>（顶部栏也有「搜索…」按钮）。</li>
+      <li>输入关键词 → 实时分组结果。</li>
+      <li>鼠标点结果即跳转 / 关闭。<kbd>Esc</kbd> 退出。</li>
+    </ol>
+  </div>
+</section>
+
+<section class="feature">
+  <span class="feature-tag">P4 · 3.4</span>
+  <h3 class="feature-title">仪表盘可定制</h3>
+  <p>「财务状况」首页的 9 个 widget（KPI / 预算 / 储蓄目标 / 现金流预测 / 订阅 / 收入曲线 / 项目柱 / 工作生活 / 账户进度）可以单独显隐，也可以上下排序。布局保存到本地浏览器，下次访问保留。</p>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>进「财务状况」，看右上角「自定义仪表盘」按钮。</li>
+      <li>点开右抽屉，每个 widget 三个按钮：上移 / 下移 / 显隐。</li>
+      <li>关掉抽屉立即生效。点「恢复默认顺序」可一键回滚。</li>
+    </ol>
+  </div>
+</section>
+
+<section class="feature">
+  <span class="feature-tag">P4 · 1.7</span>
+  <h3 class="feature-title">多币种 + 手动汇率</h3>
+  <p>本位币默认 CNY。账户用别的币种（USD / HKD / EUR / JPY 等）时，账户卡片会显示<strong>原币 + ≈ ¥X CNY 折算</strong>，所有聚合（净资产、KPI）按汇率折算到本位币。</p>
+  <div class="mock">
+    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+      <span class="mono-cap">原币</span>
+      <span style="font-family: var(--mono);">$ 1,200.00 USD</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
+      <span class="mono-cap">≈ CNY</span>
+      <span style="font-family: var(--mono); font-weight: 600;">¥ 8,640.00</span>
+    </div>
+    <div class="mono-cap" style="margin-top: 4px;">汇率 7.20</div>
+  </div>
+  <div class="try-box">
+    <span class="label">上手三步</span>
+    <ol>
+      <li>进「财务设置 → 货币与单位」，第三张卡是「汇率」编辑器。</li>
+      <li>调整 USD / HKD / EUR / JPY 等汇率，或加新币种（如 GBP）。</li>
+      <li>建一个该币种的账户（账户卡片的 currency 字段），底部就会出现折算小卡。</li>
+    </ol>
+  </div>
+  <div class="tip">本工具不依赖外部汇率 API（离线可用）。汇率需要手动维护，建议每月或交易前更新一次。</div>
+</section>
+
+<!-- ============ NEXT ============ -->
+<div class="next">
+  <h2>路线图全部完成 ✓</h2>
+  <p>4 个 Phase 16 项功能全部 ship。剩下的是一些可选的小补丁与增强（拖拽排序 / 自动汇率 / 发票工作台等），见<strong>路线图收尾方案</strong>。</p>
+  <a href="./roadmap-followup.html">查看收尾优化方案 →</a>
+</div>
+
+</div>
+</body>
+</html>

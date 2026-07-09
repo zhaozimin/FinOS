@@ -1,0 +1,209 @@
+{
+  "skillName": "finance_node_openclaw",
+  "description": "Read and write the local Finance Node (FinOS) so OpenClaw / Claude / GPT can share the same ledger as the web dashboard. Covers core CRUD, dashboard analytics, attachments, recurring rules and exchange rates.",
+  "baseUrl": "__BASE_URL__",
+  "authorization": {
+    "type": "bearer",
+    "token": "__TOKEN__"
+  },
+  "tools": [
+    {
+      "name": "finance_health_check",
+      "description": "Quick health probe. Returns nodeName / status / lastIngestedAt. Use it before making other calls if connectivity is uncertain.",
+      "method": "GET",
+      "path": "/v1/health"
+    },
+    {
+      "name": "finance_get_configuration",
+      "description": "Read complete master data (accounts, categories, projects, counterparties, settings, exchangeRates). MUST call this once before creating transactions so you know real account names, category IDs, default currency, etc. Cache for ~30 minutes.",
+      "method": "GET",
+      "path": "/v1/configuration"
+    },
+    {
+      "name": "finance_list_transactions",
+      "description": "List transactions with optional filters. Query params: view (combined/company/personal), month (YYYY-MM), kind (income/expense/transfer), reimbursementStatus, tag, q (fuzzy match on title/merchant/note/category/project), categoryId, accountName, limit.",
+      "method": "GET",
+      "path": "/v1/transactions"
+    },
+    {
+      "name": "finance_summary_month",
+      "description": "Single-month income / expense / balance / pendingReimbursement / count totals. Query params: view, month (YYYY-MM, default current).",
+      "method": "GET",
+      "path": "/v1/summary/month"
+    },
+    {
+      "name": "finance_dashboard_overview",
+      "description": "Comprehensive dashboard payload: KPIs, monthly trend, sankey, ROI, category sunburst, account list, AI suggestions. Query params: view (combined/company/personal).",
+      "method": "GET",
+      "path": "/v1/dashboard/overview"
+    },
+    {
+      "name": "finance_budget_status",
+      "description": "Per-category budget vs actual for a given month. Returns items[] with budget/spent/remaining/percentUsed. Query params: month (YYYY-MM, default current).",
+      "method": "GET",
+      "path": "/v1/budget/status"
+    },
+    {
+      "name": "finance_add_transaction",
+      "description": "Create a new transaction in the local ledger. The MOST common write tool. For expense/income use accountName; for transfer use fromAccountName + toAccountName. Set source='agent' so the user can audit AI-written entries.",
+      "method": "POST",
+      "path": "/v1/transactions",
+      "inputSchema": {
+        "type": "object",
+        "required": ["title", "amount", "kind"],
+        "properties": {
+          "title": { "type": "string", "description": "Short description, e.g. '瑞幸咖啡' / '客户A 4月服务费'" },
+          "amount": { "type": "number", "description": "Always positive. Direction implied by kind." },
+          "kind": { "type": "string", "enum": ["expense", "income", "transfer"] },
+          "occurredAt": { "type": "string", "description": "ISO8601 datetime. Defaults to now if omitted." },
+          "accountName": { "type": "string", "description": "Required for expense/income. Must match an existing account name from /v1/configuration." },
+          "fromAccountName": { "type": "string", "description": "Required for transfer (the source account)." },
+          "toAccountName": { "type": "string", "description": "Required for transfer (the destination account)." },
+          "merchant": { "type": "string", "description": "Vendor / counterparty name shown to user." },
+          "note": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "category": {
+            "type": "object",
+            "description": "Either {id} (preferred — copy from /v1/configuration) or {name} (fallback — server tries name match).",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" }
+            }
+          },
+          "projectName": { "type": "string", "description": "Tag transaction to a project (must exist in configuration.settings.projects)." },
+          "sourceName": { "type": "string", "description": "Funding source label (legacy field, optional)." },
+          "counterpartyId": { "type": "string", "description": "Optional ID of a saved counterparty (from configuration.settings.counterparties)." },
+          "reimbursementStatus": {
+            "type": "string",
+            "enum": ["draft", "submitted", "reimbursed", "rejected", "notApplicable"],
+            "description": "Default 'notApplicable'. Use 'submitted' when company-paid expense waiting for reimbursement."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 code (e.g. CNY, USD). If omitted, server uses the account's currency or settings.defaultCurrency. amountInBaseCurrency snapshot is computed automatically."
+          },
+          "invoiceIssued": {
+            "type": "boolean",
+            "description": "P3: true if an invoice has been issued (for income) or received (for deductible expenses)."
+          },
+          "invoiceAttachmentId": {
+            "type": "string",
+            "description": "P3: ID of the attachment that holds the invoice file. Upload via finance_upload_attachment first."
+          },
+          "taxCategory": {
+            "type": "string",
+            "enum": ["personal", "business-income", "business-expense-deductible", "business-expense-nondeductible", "transfer"],
+            "description": "P3: Tax classification. Default 'personal'. Used by the tax report exporter."
+          },
+          "source": {
+            "type": "string",
+            "description": "Provenance tag. AI agents should set 'agent' or a specific name like 'claude' / 'gpt-4o' so users can audit. Other reserved values: 'manual', 'recurring', 'import-wechat', 'import-alipay', 'adjustment'."
+          }
+        }
+      }
+    },
+    {
+      "name": "finance_update_transaction",
+      "description": "Replace fields on an existing transaction (omitted fields keep their old values). Path param: id (transaction id).",
+      "method": "PUT",
+      "path": "/v1/transactions/{id}",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "amount": { "type": "number" },
+          "occurredAt": { "type": "string" },
+          "merchant": { "type": "string" },
+          "note": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "category": { "type": "object" },
+          "projectName": { "type": "string" },
+          "counterpartyId": { "type": "string" },
+          "reimbursementStatus": {
+            "type": "string",
+            "enum": ["draft", "submitted", "reimbursed", "rejected", "notApplicable"]
+          },
+          "invoiceIssued": { "type": "boolean" },
+          "invoiceAttachmentId": { "type": "string" },
+          "taxCategory": {
+            "type": "string",
+            "enum": ["personal", "business-income", "business-expense-deductible", "business-expense-nondeductible", "transfer"]
+          }
+        }
+      }
+    },
+    {
+      "name": "finance_delete_transaction",
+      "description": "Delete a transaction (also cascades attachment files). Path param: id. Use sparingly — prefer correcting via finance_update_transaction.",
+      "method": "DELETE",
+      "path": "/v1/transactions/{id}"
+    },
+    {
+      "name": "finance_update_reimbursement",
+      "description": "Update only the reimbursement status of a transaction (cheaper than full update). Path param: id.",
+      "method": "PATCH",
+      "path": "/v1/transactions/{id}/reimbursement",
+      "inputSchema": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["draft", "submitted", "reimbursed", "rejected", "notApplicable"]
+          }
+        }
+      }
+    },
+    {
+      "name": "finance_upload_attachment",
+      "description": "P1: Upload an attachment (receipt / invoice photo / etc.) and associate with a transaction. Body holds base64-encoded bytes (no multipart, ≤10 MB). Returns AttachmentRef={id, mime, sizeBytes, originalName, createdAt}. Use the returned id as invoiceAttachmentId on the transaction if needed.",
+      "method": "POST",
+      "path": "/v1/transactions/{id}/attachments",
+      "inputSchema": {
+        "type": "object",
+        "required": ["filename", "mime", "data"],
+        "properties": {
+          "filename": { "type": "string" },
+          "mime": { "type": "string", "description": "e.g. 'image/jpeg' / 'image/png' / 'application/pdf'" },
+          "data": { "type": "string", "description": "Base64-encoded file bytes." }
+        }
+      }
+    },
+    {
+      "name": "finance_list_recurring",
+      "description": "P2: List all recurring transaction rules (subscriptions / salary / rent / etc.).",
+      "method": "GET",
+      "path": "/v1/recurring"
+    },
+    {
+      "name": "finance_create_recurring",
+      "description": "P2: Create a recurring rule. The 'template' is a transaction shape that will be cloned at every interval. catchup runs on save: if nextDueAt <= today, the first transaction is generated immediately.",
+      "method": "POST",
+      "path": "/v1/recurring",
+      "inputSchema": {
+        "type": "object",
+        "required": ["name", "frequency", "intervalN", "startDate", "nextDueAt", "template"],
+        "properties": {
+          "name": { "type": "string" },
+          "frequency": { "type": "string", "enum": ["daily", "weekly", "monthly", "yearly"] },
+          "intervalN": { "type": "integer", "description": "Repeat every N units (e.g. 1=every month, 3=every 3 months)." },
+          "dayOfPeriod": { "type": "integer", "description": "Day-of-month for monthly/yearly (1-31, end-of-month auto-clamped)." },
+          "startDate": { "type": "string", "description": "ISO date YYYY-MM-DD" },
+          "endDate": { "type": "string" },
+          "nextDueAt": { "type": "string", "description": "ISO date when next instance fires." },
+          "enabled": { "type": "boolean", "description": "Default true." },
+          "template": {
+            "type": "object",
+            "description": "Same shape as a finance_add_transaction body. Required: title, amount, kind, accountName (or from/to for transfer)."
+          }
+        }
+      }
+    },
+    {
+      "name": "finance_refresh_rates",
+      "description": "P4: Force-refresh exchange rates from open.er-api.com. Returns the updated exchangeRates object. Useful when settings.exchangeRates.autoFetch is off and the user wants the latest cross-currency conversions.",
+      "method": "POST",
+      "path": "/v1/rates/refresh"
+    }
+  ]
+}

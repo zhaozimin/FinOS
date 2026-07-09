@@ -1,0 +1,19 @@
+{
+  "_comment": "复制此文件为 runtime/config.json 后修改 — 该文件包含敏感信息，不要提交到 git。",
+
+  "nodeName": "我的财务节点",
+  "host": "0.0.0.0",
+  "port": 31889,
+
+  "_accessToken_help": "强烈建议改成 32 位以上的随机字符串。可用：python3 -c \"import secrets; print(secrets.token_urlsafe(32))\"",
+  "accessToken": "PLEASE_CHANGE_ME_TO_A_RANDOM_32_CHAR_TOKEN",
+
+  "_remoteAccess_help": "远程访问方式：'Tailscale' / 'cloudflare-tunnel' / 'local-only'。仅作展示，不影响实际网络。",
+  "remoteAccess": "local-only",
+
+  "_tailscale_optional": "如启用 Tailscale，填入下方两项；否则可删除或留空。",
+  "tailscaleIP": "",
+  "tailscaleHostname": "",
+
+  "lastIngestedAt": null
+}

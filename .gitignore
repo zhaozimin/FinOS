@@ -1,0 +1,60 @@
+# ============================================================
+# FinOS · 本地优先财务管理系统
+# ============================================================
+
+# ---- 用户敏感数据（绝对不能提交）----
+server/runtime/config.json
+server/runtime/connection-info.txt
+server/runtime/finance-node.pid
+server/runtime/finance.sqlite3
+server/runtime/finance.sqlite3.*
+server/runtime/finance.backup-*
+server/runtime/attachments/*
+!server/runtime/attachments/.gitkeep
+
+# ---- 个性化的 OpenClaw / Skill 配置 ----
+server/runtime/openclaw_finance_tools.json
+**/profile.local.json
+
+# ---- 构建产物 / 依赖 ----
+server/web-dashboard/node_modules/
+server/web-dashboard/dist/
+server/web-dashboard/.vite/
+server/web-dashboard/.eslintcache
+
+# 可选：是否提交 server/web/ 取决于你
+# 默认提交（让用户开箱即用，免 npm build）
+# 如不提交，把下行取消注释：
+# server/web/
+
+# ---- 日志 / 进程 ----
+server/logs/
+*.log
+*.pid
+
+# ---- IDE / 系统垃圾 / 工具缓存 ----
+.DS_Store
+.idea/
+.vscode/
+.impeccable/
+*.swp
+*.swo
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# ---- Node ----
+npm-debug.log*
+yarn-error.log*
+.npm
+
+# ---- Python venv ----
+.venv/
+venv/
+env/
+
+# ---- 临时文件 ----
+*.tmp
+*.bak
+.~lock.*
