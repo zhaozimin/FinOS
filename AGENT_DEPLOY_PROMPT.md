@@ -29,13 +29,16 @@
 
 ## 步骤
 
-### 1. 克隆仓库
-把仓库克隆到我的用户目录下一个明确位置（例如 `~/FinOS`），并进入：
+### 1. 定位源码（你多半已经拿到了）
+你很可能**已经有这套源码**了 —— 就在当前目录，或审核方已经把整个文件夹交给了你。先确认：
 ```
-git clone https://github.com/zhaozimin/FinOS.git ~/FinOS
-cd ~/FinOS
+ls server/finance_node_server.py 2>/dev/null && echo "源码已就位" || echo "未找到，需克隆"
 ```
-如果 `~/FinOS` 已存在，改用 `~/FinOS-app` 之类不冲突的名字，并告诉我最终路径。
+- **已就位** → `cd` 到含有 `server/` 的那一层目录，直接跳到第 2 步。
+- **未找到** → 从公开仓库克隆再进入：
+```
+git clone https://github.com/zhaozimin/FinOS.git ~/FinOS && cd ~/FinOS
+```
 
 ### 2. 安装唯一的 Python 依赖
 ```
@@ -77,14 +80,18 @@ curl -H "Authorization: Bearer <TOKEN>" http://127.0.0.1:31889/v1/health
 `bash server/test_finance_node.sh`（会写一笔测试交易再查回来，最后打印
 "Finance Node test passed."）。
 
-### 6. 交付给我
-给我最终可直接打开的地址（把 <TOKEN> 换成真实值）：
+### 6. 交付给我（务必完整输出这两样）
+部署成功后，请**明确无误**地把下面两样告诉我：
+
+1. **登录密钥（Token）** —— 就是第 4 步 `connection-info.txt` 里那串 `accessToken`，
+   原样贴给我。这是唯一的登录凭证。
+2. **打开地址**（把 <TOKEN> 换成上面的真实密钥）：
 ```
 http://127.0.0.1:31889/dashboard/?token=<TOKEN>
 ```
-并单独把 **登录密钥（Token）** 明文告诉我一次，让我记下来。
-首次用这个带 `?token=` 的网址打开后，密钥会自动存进浏览器，之后直接访问
-`http://127.0.0.1:31889/dashboard/` 即可。
+
+首次用这个带 `?token=` 的地址打开后，密钥会自动存进浏览器；之后直接访问
+`http://127.0.0.1:31889/dashboard/` 即可。请把这串密钥妥善保存。
 
 ## 安全红线（务必遵守）
 
