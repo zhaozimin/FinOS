@@ -165,7 +165,7 @@
         "properties": {
           "filename": { "type": "string" },
           "mime": { "type": "string", "description": "e.g. 'image/jpeg' / 'image/png' / 'application/pdf'" },
-          "data": { "type": "string", "description": "Base64-encoded file bytes." }
+          "data": { "type": "string", "description": "Base64-encoded file bytes. If your runtime saved the user's image to a local file (agent gateways usually note its path), read that file and base64-encode its raw bytes here — do NOT transcribe or describe the image." }
         }
       }
     },

@@ -123,6 +123,18 @@ anthropic_tools = [
 → AI 调 `finance_budget_status`，找到"外卖饮食"
 → 回复：「4 月外卖饮食 ¥432 / ¥500（86%，剩 ¥68）」
 
+### 场景：发收据图片 → AI 记账并附图
+
+**用户**：（甩来一张付款截图）「刚交的物业费 1200」
+
+**AI 内部流程**：
+1. 正常提取字段 → 调 `finance_add_transaction` → 拿到交易 `id`
+2. 运行时把这张图存成了本地文件（网关通常会提示 `[image saved at: /path/xxx.jpg]`）→ 读该文件、Base64 编码
+3. 调 `finance_upload_attachment({ id, filename, mime:"image/jpeg", data:<base64> })`
+4. 回复：「✓ 已记 ¥1200 物业费 → 招商银行卡，已附收据」
+
+> 细节见 SKILL.md 第十一节。**要点**：模型不能凭"看到的图"还原字节，必须读运行时给出的本地文件（或 Base64 / URL）再上传。
+
 ---
 
 ## 三、安全建议
@@ -156,6 +168,7 @@ agent_request = "测试一下我的 FinOS 是否连得上？"
 | AI 把转账当支出（金额翻倍错） | kind 判定错。强调 SKILL.md 第三节信用卡 / 转账场景 |
 | AI 说"已为你记账"但没真调工具 | 工具描述没注册到 agent。检查 functions / tools schema |
 | 401 Unauthorized | token 不对 或 baseUrl 写错（http vs https） |
+| 发了收据图但没附上 / `data` 为空 | 模型试图"描述图片"而非上传字节。必须读运行时给出的本地文件（或 Base64 / URL）再 Base64 编码，见 SKILL.md 第十一节 |
 
 ---
 
