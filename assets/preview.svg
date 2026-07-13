@@ -1,0 +1,113 @@
+<svg width="1200" height="760" viewBox="0 0 1200 760" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="FinOS 仪表盘预览（示意数据）">
+  <defs>
+    <linearGradient id="pbg" x1="0" y1="0" x2="1200" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B0F17"/><stop offset="1" stop-color="#0A1220"/>
+    </linearGradient>
+    <linearGradient id="gTB" x1="300" y1="0" x2="632" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2DD4BF"/><stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+    <linearGradient id="gBC" x1="632" y1="0" x2="1104" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- window -->
+  <rect x="1" y="1" width="1198" height="758" rx="20" fill="url(#pbg)"/>
+  <rect x="1.5" y="1.5" width="1197" height="757" rx="19.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.07"/>
+
+  <!-- sidebar -->
+  <rect x="1" y="1" width="207" height="758" rx="20" fill="#0E1420"/>
+  <rect x="188" y="1" width="20" height="758" fill="#0E1420"/>
+  <line x1="208" y1="1" x2="208" y2="759" stroke="#FFFFFF" stroke-opacity="0.06"/>
+  <text x="28" y="54" font-family="'SF Pro Display','Segoe UI',Arial,sans-serif" font-size="24" font-weight="800" letter-spacing="-1" fill="#F8FAFC">FinOS</text>
+  <circle cx="112" cy="46" r="5" fill="#F59E0B"/>
+
+  <!-- nav -->
+  <g font-family="'SF Pro Text','Segoe UI',Arial,sans-serif" font-size="14" font-weight="600">
+    <rect x="16" y="98" width="176" height="40" rx="10" fill="#F59E0B" fill-opacity="0.14"/>
+    <rect x="30" y="110" width="16" height="16" rx="4" fill="#F59E0B"/>
+    <text x="58" y="123" fill="#FCD34D">资金流量</text>
+    <rect x="30" y="158" width="16" height="16" rx="4" fill="#64748B"/>
+    <text x="58" y="171" fill="#94A3B8">财务状况</text>
+    <rect x="30" y="206" width="16" height="16" rx="4" fill="#64748B"/>
+    <text x="58" y="219" fill="#94A3B8">资金流水</text>
+    <rect x="30" y="254" width="16" height="16" rx="4" fill="#64748B"/>
+    <text x="58" y="267" fill="#94A3B8">财务设置</text>
+  </g>
+  <rect x="24" y="702" width="160" height="34" rx="9" fill="#3B82F6" fill-opacity="0.12" stroke="#3B82F6" stroke-opacity="0.3"/>
+  <circle cx="42" cy="719" r="4" fill="#34D399"/>
+  <text x="56" y="724" font-family="'SF Pro Text','Segoe UI',Arial,sans-serif" font-size="12" fill="#93C5FD">连接状态 · 已连接</text>
+
+  <!-- header -->
+  <text x="248" y="58" font-family="'SF Pro Display','Segoe UI',Arial,sans-serif" font-size="24" font-weight="700" fill="#F8FAFC">全局资金流</text>
+  <text x="248" y="84" font-family="'SF Pro Text','Segoe UI',Arial,sans-serif" font-size="13" fill="#64748B">按资金来源、账户、项目、分类之间的流量关系 · 示意数据</text>
+  <g font-family="'SF Pro Text','Segoe UI',Arial,sans-serif" font-size="12" font-weight="600">
+    <rect x="946" y="40" width="206" height="30" rx="8" fill="#131A26" stroke="#FFFFFF" stroke-opacity="0.07"/>
+    <rect x="950" y="44" width="66" height="22" rx="6" fill="#F59E0B" fill-opacity="0.9"/>
+    <text x="983" y="59" text-anchor="middle" fill="#1A1206">全部资金流</text>
+    <text x="1052" y="59" text-anchor="middle" fill="#94A3B8">工作</text>
+    <text x="1116" y="59" text-anchor="middle" fill="#94A3B8">生活</text>
+  </g>
+
+  <!-- sankey panel -->
+  <rect x="248" y="108" width="904" height="384" rx="14" fill="#0E1524" stroke="#FFFFFF" stroke-opacity="0.06"/>
+  <g font-family="'SF Pro Text','Segoe UI',Arial,sans-serif" font-size="12" font-weight="600">
+    <circle cx="270" cy="138" r="4" fill="#2DD4BF"/><text x="282" y="142" fill="#94A3B8">资金来源</text>
+    <circle cx="360" cy="138" r="4" fill="#3B82F6"/><text x="372" y="142" fill="#94A3B8">账户</text>
+    <circle cx="428" cy="138" r="4" fill="#F59E0B"/><text x="440" y="142" fill="#94A3B8">分类</text>
+  </g>
+
+  <!-- bands source -> accounts -->
+  <g>
+    <path d="M300,168 C460,168 460,176 620,176 L620,258 C460,258 460,260 300,260 Z" fill="url(#gTB)" opacity="0.5"/>
+    <path d="M300,262 C460,262 460,270 620,270 L620,358 C460,358 460,352 300,352 Z" fill="url(#gTB)" opacity="0.5"/>
+    <path d="M300,354 C460,354 460,370 620,370 L620,446 C460,446 460,444 300,444 Z" fill="url(#gTB)" opacity="0.5"/>
+  </g>
+  <!-- bands accounts -> categories -->
+  <g>
+    <path d="M632,176 C868,176 868,168 1104,168 L1104,213 C868,213 868,214 632,214 Z" fill="url(#gBC)" opacity="0.46"/>
+    <path d="M632,214 C868,214 868,222 1104,222 L1104,278 C868,278 868,258 632,258 Z" fill="url(#gBC)" opacity="0.46"/>
+    <path d="M632,270 C868,270 868,288 1104,288 L1104,348 C868,348 868,312 632,314 Z" fill="url(#gBC)" opacity="0.46"/>
+    <path d="M632,314 C868,314 868,358 1104,358 L1104,400 C868,400 868,352 632,358 Z" fill="url(#gBC)" opacity="0.46"/>
+    <path d="M632,370 C868,370 868,418 1104,418 L1104,454 C868,454 868,446 632,446 Z" fill="url(#gBC)" opacity="0.46"/>
+  </g>
+
+  <!-- nodes -->
+  <rect x="288" y="166" width="12" height="280" rx="4" fill="#2DD4BF"/>
+  <rect x="620" y="176" width="12" height="82" rx="4" fill="#3B82F6"/>
+  <rect x="620" y="270" width="12" height="88" rx="4" fill="#3B82F6"/>
+  <rect x="620" y="370" width="12" height="76" rx="4" fill="#60A5FA"/>
+  <rect x="1104" y="168" width="12" height="45" rx="4" fill="#F59E0B"/>
+  <rect x="1104" y="222" width="12" height="56" rx="4" fill="#FB923C"/>
+  <rect x="1104" y="288" width="12" height="60" rx="4" fill="#F59E0B"/>
+  <rect x="1104" y="358" width="12" height="42" rx="4" fill="#FBBF24"/>
+  <rect x="1104" y="418" width="12" height="36" rx="4" fill="#FB923C"/>
+
+  <!-- KPI cards -->
+  <g font-family="'SF Pro Text','Segoe UI',Arial,sans-serif">
+    <!-- card 1 -->
+    <rect x="248" y="516" width="288" height="200" rx="14" fill="#0E1524" stroke="#FFFFFF" stroke-opacity="0.06"/>
+    <circle cx="500" cy="548" r="14" fill="#10B981" fill-opacity="0.16"/><circle cx="500" cy="548" r="4.5" fill="#34D399"/>
+    <text x="276" y="554" font-size="14" fill="#94A3B8">净资产</text>
+    <text x="276" y="606" font-size="38" font-weight="800" fill="#F8FAFC">¥128,640</text>
+    <text x="276" y="640" font-size="13" fill="#34D399">▲ 可撑 18.3 个月</text>
+    <rect x="276" y="664" width="232" height="6" rx="3" fill="#1E293B"/>
+    <rect x="276" y="664" width="176" height="6" rx="3" fill="#10B981"/>
+    <!-- card 2 -->
+    <rect x="556" y="516" width="288" height="200" rx="14" fill="#0E1524" stroke="#FFFFFF" stroke-opacity="0.06"/>
+    <circle cx="808" cy="548" r="14" fill="#3B82F6" fill-opacity="0.16"/><circle cx="808" cy="548" r="4.5" fill="#60A5FA"/>
+    <text x="584" y="554" font-size="14" fill="#94A3B8">工作账户</text>
+    <text x="584" y="606" font-size="38" font-weight="800" fill="#F8FAFC">¥86,200</text>
+    <text x="584" y="640" font-size="13" fill="#60A5FA">本月 +¥12,400</text>
+    <rect x="584" y="664" width="232" height="6" rx="3" fill="#1E293B"/>
+    <rect x="584" y="664" width="150" height="6" rx="3" fill="#3B82F6"/>
+    <!-- card 3 -->
+    <rect x="864" y="516" width="288" height="200" rx="14" fill="#0E1524" stroke="#FFFFFF" stroke-opacity="0.06"/>
+    <circle cx="1116" cy="548" r="14" fill="#F59E0B" fill-opacity="0.16"/><circle cx="1116" cy="548" r="4.5" fill="#FBBF24"/>
+    <text x="892" y="554" font-size="14" fill="#94A3B8">生活账户</text>
+    <text x="892" y="606" font-size="38" font-weight="800" fill="#F8FAFC">¥42,440</text>
+    <text x="892" y="640" font-size="13" fill="#FBBF24">本月 −¥3,180</text>
+    <rect x="892" y="664" width="232" height="6" rx="3" fill="#1E293B"/>
+    <rect x="892" y="664" width="96" height="6" rx="3" fill="#F59E0B"/>
+  </g>
+</svg>

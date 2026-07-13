@@ -1,0 +1,54 @@
+<svg width="1280" height="340" viewBox="0 0 1280 340" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="FinOS · 本地优先的双用途财务工作台">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B0F17"/>
+      <stop offset="0.55" stop-color="#0E1524"/>
+      <stop offset="1" stop-color="#0A1220"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="560" y1="0" x2="1248" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2DD4BF"/>
+      <stop offset="0.5" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="80" y1="90" x2="440" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#CBD5E1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- backdrop -->
+  <rect x="1" y="1" width="1278" height="338" rx="22" fill="url(#bg)"/>
+  <rect x="1.5" y="1.5" width="1277" height="337" rx="21.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.06"/>
+
+  <!-- sankey flow motif (right) -->
+  <g opacity="0.9">
+    <path d="M580,74 C910,74 910,60 1240,60 L1240,96 C910,96 910,118 580,118 Z" fill="url(#flow)" opacity="0.34"/>
+    <path d="M580,124 C910,124 910,112 1240,112 L1240,156 C910,156 910,176 580,178 Z" fill="url(#flow)" opacity="0.42"/>
+    <path d="M580,184 C910,184 910,176 1240,176 L1240,228 C910,228 910,232 580,232 Z" fill="url(#flow)" opacity="0.30"/>
+    <path d="M580,238 C910,238 910,244 1240,244 L1240,300 C910,300 910,290 580,288 Z" fill="url(#flow)" opacity="0.24"/>
+    <!-- source / sink node bars -->
+    <rect x="568" y="70" width="8" height="222" rx="4" fill="#2DD4BF" opacity="0.85"/>
+    <rect x="1244" y="56" width="6" height="46" rx="3" fill="#2DD4BF" opacity="0.8"/>
+    <rect x="1244" y="110" width="6" height="48" rx="3" fill="#38BDF8" opacity="0.8"/>
+    <rect x="1244" y="174" width="6" height="56" rx="3" fill="#F59E0B" opacity="0.85"/>
+    <rect x="1244" y="242" width="6" height="60" rx="3" fill="#FB923C" opacity="0.85"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="78" y="182" font-family="'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif" font-size="112" font-weight="800" letter-spacing="-3" fill="url(#ink)">FinOS</text>
+  <circle cx="418" cy="172" r="11" fill="#F59E0B"/>
+
+  <!-- tagline -->
+  <text x="82" y="230" font-family="'SF Pro Text','Segoe UI',Helvetica,Arial,sans-serif" font-size="27" font-weight="600" fill="#E2E8F0">本地优先的双用途财务工作台</text>
+  <text x="82" y="264" font-family="'SF Pro Text','Segoe UI',Helvetica,Arial,sans-serif" font-size="17" fill="#7C8AA0">记生活账，也记经营账 · 数据只在你自己的 SQLite 里</text>
+
+  <!-- pills -->
+  <g font-family="'SF Pro Text','Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600">
+    <rect x="82" y="286" width="118" height="30" rx="15" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.45"/>
+    <text x="141" y="306" text-anchor="middle" fill="#5EEAD4">无云 · 无追踪</text>
+    <rect x="210" y="286" width="122" height="30" rx="15" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.45"/>
+    <text x="271" y="306" text-anchor="middle" fill="#93C5FD">SQLite 单文件</text>
+    <rect x="342" y="286" width="118" height="30" rx="15" fill="#F59E0B" fill-opacity="0.14" stroke="#F59E0B" stroke-opacity="0.45"/>
+    <text x="401" y="306" text-anchor="middle" fill="#FCD34D">AI 可代记账</text>
+  </g>
+</svg>
