@@ -59,8 +59,10 @@ bash server/install_and_start_finance_node.sh
 在后台启动后端，并打印一段「连接信息」。
 
 - 若这台机器没有 `screen`，脚本会自动用 `nohup` 后台启动，正常。
-- 若提示端口 59418 被占用：先查 `lsof -tiTCP:59418`，在确认那不是别的重要
-  程序后，可 `kill` 掉它，或改 `server/runtime/config.json` 里的 `port` 再重跑。
+- 若提示端口 59418 被占用：先 `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:59418/v1/health`，
+  返回 `401` 说明占用者**就是一个已在运行的 FinOS**（我之前装过）——**不要杀、不要重装**，
+  直接跳到第 4 步用它已有的连接信息交付（安装目录看 `~/.config/finos/install.json`）。
+  不是 FinOS 才 `lsof -tiTCP:59418` 查明、与我确认后 kill，或改 `server/runtime/config.json` 的 `port` 重跑。
 
 > 备选（想在前台看实时日志、按 Ctrl-C 停）：
 > `cp server/runtime/config.json.example server/runtime/config.json`，
@@ -94,6 +96,14 @@ http://127.0.0.1:59418/dashboard/?token=<TOKEN>
 
 首次用这个带 `?token=` 的地址打开后，密钥会自动存进浏览器；之后直接访问
 `http://127.0.0.1:59418/dashboard/` 即可。请把这串密钥妥善保存。
+
+交付后再写一个全局指针（只存安装路径、不存密钥，让 AI 记账员以后在任何文件夹都找得到这本账）：
+```
+mkdir -p ~/.config/finos && printf '{"installPath":"%s"}\n' "$(pwd)" > ~/.config/finos/install.json
+```
+
+最后建议我装开机自启（macOS）：`bash server/install_launch_agent.sh`——
+不装的话重启电脑后服务不会自己起来，需要回安装目录重跑第 3 步（数据与密钥不变）。
 
 ## 安全红线（务必遵守）
 

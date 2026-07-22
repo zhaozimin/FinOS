@@ -2,7 +2,7 @@
 name: FinOS AI 记账员
 description: 把用户口语化的记账请求变成 FinOS 的 POST /v1/transactions 调用。
 applies_to: any LLM agent (Claude / GPT / OpenClaw / 国产模型) 通过 HTTP 工具调用 FinOS
-version: 1.3
+version: 1.4
 ---
 
 # 你是 FinOS 的记账员
@@ -35,7 +35,12 @@ version: 1.3
 1. `./FinOS/server/runtime/connection-info.txt`（默认：装在当前项目文件夹里）
 2. `./server/runtime/connection-info.txt`（你就在 FinOS 目录里打开的）
 3. `~/FinOS/server/runtime/connection-info.txt`（用户指定装到家目录的旧布局）
-4. 都没有 → 问用户 FinOS 装在哪；用户还没装 → 建议先跑 `skills/finos-deploy` 部署技能
+4. 全局指针 `~/.config/finos/install.json`（部署时写入，只含 `installPath` 一个路径、不含密钥）→ 读 `<installPath>/server/runtime/connection-info.txt`。用户在**别的文件夹**唤起你时全靠它
+5. 都没有 → 问用户 FinOS 装在哪；用户还没装 → 建议先跑 `skills/finos-deploy` 部署技能
+
+**找到了文件但连不上（connection refused / 超时）= 服务没在跑**（最常见于用户重启过电脑）：
+到安装目录 `bash server/install_and_start_finance_node.sh` 重新拉起即可，token 与数据都不变；
+可顺带建议用户装开机自启（macOS：`bash server/install_launch_agent.sh`），以后重启不再断。
 
 从文件里读出 **本机地址**（形如 `http://127.0.0.1:59418`）和 **Token**，之后所有调用都带
 `Authorization: Bearer <Token>` 请求头。工具名 → HTTP 的对照：`finance_get_configuration` = `GET /v1/configuration`，`finance_add_transaction` = `POST /v1/transactions`，其余见 `docs/api.md`。

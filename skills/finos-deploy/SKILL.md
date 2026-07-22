@@ -2,7 +2,7 @@
 name: FinOS 本机部署员
 description: 让任意编码 Agent 在用户本机克隆、安装并跑通 FinOS 财务工作台，最后交付登录地址与密钥。
 applies_to: any coding agent with shell + file access (Claude Code / Cursor / Cline / OpenClaw / Codex)
-version: 1.0
+version: 1.1
 ---
 
 # 你是 FinOS 的部署员
@@ -61,7 +61,9 @@ bash server/install_and_start_finance_node.sh
 脚本自动：创建 `server/runtime/config.json`、生成随机 accessToken、后台启动、打印连接信息。
 
 - 机器没有 `screen` → 脚本自动改用 `nohup`，正常。
-- 默认端口 **59418**（谐音"我就是要发"，讨个好彩头）。若被占用 → `lsof -tiTCP:59418` 查明占用者，确认不是用户的重要程序后 kill 之，或用 `FINANCE_NODE_PORT=<其它端口>` 重跑。
+- 默认端口 **59418**（谐音"我就是要发"，讨个好彩头）。若被占用，**先认亲再动手**：
+  1. `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:59418/v1/health` 返回 `401` → 占用者**就是一个已在运行的 FinOS**（多半是用户之前装过的账本）。**绝不 kill、绝不重装**——那会造出第二本账。改为：读 `~/.config/finos/install.json` 找到原安装目录，直接跳到第 4 步交付它的连接信息。
+  2. 不是 FinOS → `lsof -tiTCP:59418` 查明占用者，与用户确认后 kill 之，或用 `FINANCE_NODE_PORT=<其它端口>` 重跑。
 
 ## 第 4 步 · 取回登录密钥
 
@@ -79,13 +81,19 @@ curl -H "Authorization: Bearer <TOKEN>" http://127.0.0.1:59418/v1/health
 
 返回应含健康状态。想更彻底：`bash server/test_finance_node.sh`（写一笔测试交易再查回，最后打印 "Finance Node test passed."）。
 
-## 第 6 步 · 交付（两样都要完整输出）
+## 第 6 步 · 交付（两样都要完整输出）+ 写全局指针
 
 1. **登录密钥（Token）**：原样贴给用户，这是唯一登录凭证，提醒妥善保存。
 2. **打开地址**：`http://127.0.0.1:59418/dashboard/?token=<TOKEN>`（首次打开后密钥自动存进浏览器，之后访问 `http://127.0.0.1:59418/dashboard/` 即可）。
+3. **写全局指针**（让 AI 记账员在任何文件夹都找得到这本账；只存路径，不存密钥）：
+
+```
+mkdir -p ~/.config/finos && printf '{"installPath":"%s"}\n' "$(pwd)" > ~/.config/finos/install.json
+```
 
 ## 第 7 步 · 顺带告诉用户接下来能做什么
 
+- **开机自启（macOS，强烈建议）**：`bash server/install_launch_agent.sh`——不装的话，重启电脑后服务不会自己起来，AI 记账会连不上（补救：回安装目录重跑第 3 步的脚本，数据与密钥不变）。
 - 进「财务设置」把默认账户改成自己的（微信 / 银行卡 / 信用卡 / 现金），给每个账户填当前余额，然后到「资金流水」记第一笔。
 - 想让 AI 动嘴记账：安装同仓库的 `skills/ai-bookkeeper/`（配置见 `docs/ai-recording.md`，HTTP 工具模板在 `server/runtime/openclaw_finance_tools.json.example`，把 `__BASE_URL__` / `__TOKEN__` 换成第 4 步的真实值）。
 - 多设备访问：`docs/tailscale-setup.md`。
