@@ -90,7 +90,7 @@ npx -y skills add zhaozimin/FinOS -g --all
 - **macOS / Linux**（Windows WSL 也行）
 - **Python ≥ 3.9**（仅用标准库 + `openpyxl`）
 - **Node ≥ 20**（仅在你想改前端 / 重新构建时需要）
-- 50 MB 磁盘 + 一个 `31889` 端口
+- 50 MB 磁盘 + 一个 `59418` 端口
 
 ### 2. 克隆与配置
 
@@ -111,12 +111,12 @@ python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 cd server && python3 finance_node_server.py
 ```
 
-看到 `Finance Node running on http://0.0.0.0:31889` 即成功。
+看到 `Finance Node running on http://0.0.0.0:59418` 即成功。
 
 ### 4. 打开浏览器
 
 ```
-http://127.0.0.1:31889/dashboard/?token=<你刚才设的 token>
+http://127.0.0.1:59418/dashboard/?token=<你刚才设的 token>
 ```
 
 首次带 `?token=` 打开会自动写进 localStorage，之后直接访问 `/dashboard/` 即可。
@@ -168,9 +168,9 @@ FinOS 的功能全部通过本地 HTTP API 暴露，任何能调 HTTP 的 LLM ag
 
 1. 所有设备装 [Tailscale](https://tailscale.com/download)，登录同一账号（免费档够用）
 2. 在跑 FinOS 的 Mac 上：`tailscale status | head -1` 拿到你的 hostname
-3. 手机访问 `http://你的-mac.tailxxxx.ts.net:31889/dashboard/?token=<token>`
+3. 手机访问 `http://你的-mac.tailxxxx.ts.net:59418/dashboard/?token=<token>`
 
-其他方案：Cloudflare Tunnel（`cloudflared tunnel --url http://127.0.0.1:31889`）、frp / ngrok。**别裸暴露公网** —— token 没有速率限制。详见 [`docs/tailscale-setup.md`](./docs/tailscale-setup.md)。
+其他方案：Cloudflare Tunnel（`cloudflared tunnel --url http://127.0.0.1:59418`）、frp / ngrok。**别裸暴露公网** —— token 没有速率限制。详见 [`docs/tailscale-setup.md`](./docs/tailscale-setup.md)。
 
 ---
 
@@ -230,9 +230,9 @@ FinOS/
 |---|---|
 | 启动报 `Missing config.json` | `cp server/runtime/config.json.example server/runtime/config.json` |
 | 启动报 `openpyxl is required` | `pip3 install openpyxl` |
-| 浏览器打不开 dashboard | 先 `curl http://127.0.0.1:31889/v1/health` 确认后端起来 |
+| 浏览器打不开 dashboard | 先 `curl http://127.0.0.1:59418/v1/health` 确认后端起来 |
 | 401 Unauthorized | URL 加 `?token=<你的 token>`，或清 localStorage 的 `finance-node-token` 重输 |
-| 端口 31889 被占用 | 改 `runtime/config.json` 的 `port`，或 `lsof -tiTCP:31889 \| xargs kill` |
+| 端口 59418 被占用 | 改 `runtime/config.json` 的 `port`，或 `lsof -tiTCP:59418 \| xargs kill` |
 | 想清空数据重来 | `bash server/reset_finance_node_data.sh`（先备份再清空） |
 | 升级后功能没出现 | 浏览器硬刷新 `Cmd+Shift+R`（Service Worker 缓存了旧 JS） |
 

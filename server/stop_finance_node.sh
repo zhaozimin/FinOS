@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PID_PATH="$ROOT_DIR/runtime/finance-node.pid"
 CONFIG_PATH="$ROOT_DIR/runtime/config.json"
-PORT="31889"
+PORT="59418"
 SCREEN_SESSION="finance_node"
 
 if [[ -f "$CONFIG_PATH" ]]; then
@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 config = json.loads(Path("$CONFIG_PATH").read_text(encoding="utf-8"))
-print(config.get("port", 31889))
+print(config.get("port", 59418))
 PY
 )"
 fi

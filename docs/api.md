@@ -2,7 +2,7 @@
 
 > 后端 `finance_node_server.py` 暴露的所有 HTTP endpoint。所有非 `/dashboard/*` 的接口都需要 Bearer token。
 
-**Base URL**: `http://127.0.0.1:31889`（本机）或 `http://<your-host>:31889`（远程）
+**Base URL**: `http://127.0.0.1:59418`（本机）或 `http://<your-host>:59418`（远程）
 
 **Auth**: `Authorization: Bearer <accessToken>`（来自 `runtime/config.json`）。
 也支持 URL `?token=<...>`（专为 `<img src>` 直链附件设计；其他接口建议用 header）。
@@ -15,7 +15,7 @@
 返回服务状态、版本、最后写入时间。无需对手，但仍需要 token。
 
 ```bash
-curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:31889/v1/health
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:59418/v1/health
 ```
 ```json
 {
@@ -70,7 +70,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:31889/v1/health
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:31889/v1/transactions?month=2026-04&kind=expense&limit=50"
+  "http://127.0.0.1:59418/v1/transactions?month=2026-04&kind=expense&limit=50"
 ```
 
 返回 `Transaction[]`，结构见下方 POST 字段说明。
@@ -84,7 +84,7 @@ curl -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"瑞幸咖啡","amount":18.5,"kind":"expense","accountName":"微信支付","source":"agent"}' \
-  http://127.0.0.1:31889/v1/transactions
+  http://127.0.0.1:59418/v1/transactions
 ```
 
 ### `PUT /v1/transactions/{id}`
@@ -101,7 +101,7 @@ curl -X POST \
 curl -X PATCH -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status":"submitted"}' \
-  http://127.0.0.1:31889/v1/transactions/<id>/reimbursement
+  http://127.0.0.1:59418/v1/transactions/<id>/reimbursement
 ```
 
 ---
@@ -196,7 +196,7 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:31889/v1/export/xlsx?view=combined&from=2026-01-01" \
+  "http://127.0.0.1:59418/v1/export/xlsx?view=combined&from=2026-01-01" \
   -o finance.xlsx
 ```
 
@@ -247,7 +247,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:31889/v1/rates/refresh
+  http://127.0.0.1:59418/v1/rates/refresh
 ```
 返回更新后的 `exchangeRates` 对象，含 `lastFetchSource` 和 `updatedAt`。
 
@@ -288,7 +288,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 ```bash
 TOKEN="<你的 token>"
-BASE="http://127.0.0.1:31889"
+BASE="http://127.0.0.1:59418"
 
 # 健康
 curl -sH "Authorization: Bearer $TOKEN" $BASE/v1/health

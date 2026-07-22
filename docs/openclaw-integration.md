@@ -19,7 +19,7 @@ cp server/runtime/openclaw_finance_tools.json.example \
 ```json
 {
   "skillName": "finance_node",
-  "baseUrl": "http://127.0.0.1:31889",
+  "baseUrl": "http://127.0.0.1:59418",
   "authorization": {
     "type": "bearer",
     "token": "<你 config.json 里的 accessToken>"
@@ -30,7 +30,7 @@ cp server/runtime/openclaw_finance_tools.json.example \
 
 **远程访问**：如果 agent 跑在另一台机器，把 `baseUrl` 改成 Tailscale hostname：
 ```json
-"baseUrl": "http://<your-mac>.tailxxxx.ts.net:31889"
+"baseUrl": "http://<your-mac>.tailxxxx.ts.net:59418"
 ```
 
 ### Step 2: 把 SKILL.md 喂给 Agent
@@ -141,7 +141,7 @@ anthropic_tools = [
 
 1. **token 仅放在 `openclaw_finance_tools.json`**，**不要嵌入 SKILL.md**（SKILL.md 可能被分享、截图、贴 issue）
 2. **`openclaw_finance_tools.json` 已被 `.gitignore`**，不会被提交
-3. **远程 Agent**（如 cloud-hosted ChatGPT）调本机 FinOS：必须经过 Tailscale 等私网代理，**不要直接公网暴露 31889 端口**
+3. **远程 Agent**（如 cloud-hosted ChatGPT）调本机 FinOS：必须经过 Tailscale 等私网代理，**不要直接公网暴露 59418 端口**
 4. AI 写入的 source 应填 `"agent"` / 具体 agent 名，方便 LedgerPage 用 source filter 复核
 
 ---

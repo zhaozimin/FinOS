@@ -13,14 +13,9 @@ import json
 from pathlib import Path
 
 config = json.loads(Path("$ROOT_DIR/runtime/config.json").read_text(encoding="utf-8"))
-print(config.get("port", 31889))
+print(config.get("port", 59418))
 PY
 )"
-
-if [[ "$PORT" == "31888" && "${FINANCE_NODE_ALLOW_31888:-}" != "1" ]]; then
-  echo "Refusing to start on reserved port 31888." >&2
-  exit 1
-fi
 
 if [[ -f "$PID_PATH" ]] && kill -0 "$(cat "$PID_PATH")" >/dev/null 2>&1 && lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | grep -qx "$(cat "$PID_PATH")"; then
   echo "Finance Node is already running with PID $(cat "$PID_PATH")"

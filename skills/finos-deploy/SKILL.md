@@ -13,7 +13,7 @@ version: 1.0
 
 - 本地优先的财务工作台：Python 标准库 HTTP 后端 + SQLite + 预构建 React 前端（PWA）。
 - 全部数据只存在本机一个 SQLite 文件里，无云、无外部依赖、无追踪。
-- 后端默认监听 `127.0.0.1:31889`，用一个 Bearer Token 做登录鉴权。
+- 后端默认监听 `127.0.0.1:59418`，用一个 Bearer Token 做登录鉴权。
 - 仓库：<https://github.com/zhaozimin/FinOS>
 
 ## 第 0 步 · 前置检查（缺了先装）
@@ -59,8 +59,7 @@ bash server/install_and_start_finance_node.sh
 脚本自动：创建 `server/runtime/config.json`、生成随机 accessToken、后台启动、打印连接信息。
 
 - 机器没有 `screen` → 脚本自动改用 `nohup`，正常。
-- 端口 31889 被占 → `lsof -tiTCP:31889` 查明占用者；确认不是用户的重要程序后 kill 之，或改 `server/runtime/config.json` 的 `port` 再重跑。
-- **端口 31888 是保留端口，脚本会拒绝——不要用任何手段绕过。**
+- 默认端口 **59418**（谐音"我就是要发"，讨个好彩头）。若被占用 → `lsof -tiTCP:59418` 查明占用者，确认不是用户的重要程序后 kill 之，或用 `FINANCE_NODE_PORT=<其它端口>` 重跑。
 
 ## 第 4 步 · 取回登录密钥
 
@@ -68,12 +67,12 @@ bash server/install_and_start_finance_node.sh
 cat server/runtime/connection-info.txt
 ```
 
-读出 `Token` 与本机地址（形如 `http://127.0.0.1:31889`）。
+读出 `Token` 与本机地址（形如 `http://127.0.0.1:59418`）。
 
 ## 第 5 步 · 验证（必须做，不做不算部署完成）
 
 ```
-curl -H "Authorization: Bearer <TOKEN>" http://127.0.0.1:31889/v1/health
+curl -H "Authorization: Bearer <TOKEN>" http://127.0.0.1:59418/v1/health
 ```
 
 返回应含健康状态。想更彻底：`bash server/test_finance_node.sh`（写一笔测试交易再查回，最后打印 "Finance Node test passed."）。
@@ -81,7 +80,7 @@ curl -H "Authorization: Bearer <TOKEN>" http://127.0.0.1:31889/v1/health
 ## 第 6 步 · 交付（两样都要完整输出）
 
 1. **登录密钥（Token）**：原样贴给用户，这是唯一登录凭证，提醒妥善保存。
-2. **打开地址**：`http://127.0.0.1:31889/dashboard/?token=<TOKEN>`（首次打开后密钥自动存进浏览器，之后访问 `http://127.0.0.1:31889/dashboard/` 即可）。
+2. **打开地址**：`http://127.0.0.1:59418/dashboard/?token=<TOKEN>`（首次打开后密钥自动存进浏览器，之后访问 `http://127.0.0.1:59418/dashboard/` 即可）。
 
 ## 第 7 步 · 顺带告诉用户接下来能做什么
 
@@ -92,5 +91,5 @@ curl -H "Authorization: Bearer <TOKEN>" http://127.0.0.1:31889/v1/health
 ## 安全红线（不可违反）
 
 - `server/runtime/finance.sqlite3` 与 `config.json` 是用户的账本和钥匙：**不上传、不提交 git、不写进任何会外传的输出**（.gitignore 已排除，别绕过）。
-- 不把 31889 端口裸暴露公网；远程访问走 Tailscale / Cloudflare Tunnel。
+- 不把 59418 端口裸暴露公网；远程访问走 Tailscale / Cloudflare Tunnel。
 - Token 只交付给用户本人，除第 6 步的交付外不要在其他输出里重复它。

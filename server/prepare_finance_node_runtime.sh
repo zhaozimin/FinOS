@@ -9,17 +9,12 @@ CONFIG_PATH="$RUNTIME_DIR/config.json"
 DB_PATH="$RUNTIME_DIR/finance.sqlite3"
 INFO_PATH="$RUNTIME_DIR/connection-info.txt"
 TOOLS_OUTPUT_PATH="$RUNTIME_DIR/openclaw_finance_tools.json"
-PORT="${FINANCE_NODE_PORT:-31889}"
+# 固定默认端口 59418（谐音"我就是要发"，讨个好彩头）。可用 FINANCE_NODE_PORT 覆盖。
+PORT="${FINANCE_NODE_PORT:-59418}"
 # 默认只绑回环，绝不把财务 API 暴露到局域网。需多设备/远程访问显式设 FINANCE_NODE_HOST，
 # 或走 Tailscale/Cloudflare Tunnel（见 docs/tailscale-setup.md）。
 HOST="${FINANCE_NODE_HOST:-127.0.0.1}"
 NODE_NAME="${FINANCE_NODE_NAME:-Finance Node}"
-
-if [[ "$PORT" == "31888" && "${FINANCE_NODE_ALLOW_31888:-}" != "1" ]]; then
-  echo "Refusing to start on reserved port 31888." >&2
-  echo "Use the default port 31889, or set FINANCE_NODE_ALLOW_31888=1 to override." >&2
-  exit 1
-fi
 
 mkdir -p "$RUNTIME_DIR" "$LOG_DIR"
 chmod 700 "$RUNTIME_DIR" 2>/dev/null || true  # runtime 存 token 与整库，仅属主可访问

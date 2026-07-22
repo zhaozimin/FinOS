@@ -216,7 +216,7 @@
 
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  "http://127.0.0.1:31889/v1/summary/month?month=2026-04" | jq
+  "http://127.0.0.1:59418/v1/summary/month?month=2026-04" | jq
 ```
 
 返回：

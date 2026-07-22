@@ -3,7 +3,7 @@
 
   "nodeName": "我的财务节点",
   "host": "127.0.0.1",
-  "port": 31889,
+  "port": 59418,
 
   "_accessToken_help": "强烈建议改成 32 位以上的随机字符串。可用：python3 -c \"import secrets; print(secrets.token_urlsafe(32))\"",
   "accessToken": "PLEASE_CHANGE_ME_TO_A_RANDOM_32_CHAR_TOKEN",

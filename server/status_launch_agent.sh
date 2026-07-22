@@ -20,8 +20,8 @@ echo "launchctl status:"
 launchctl print "gui/$UID_VALUE/$LABEL" 2>/dev/null || echo "Service not loaded."
 
 echo ""
-echo "port 31889:"
-lsof -nP -iTCP:31889 -sTCP:LISTEN || echo "Port 31889 is not listening."
+echo "port 59418:"
+lsof -nP -iTCP:59418 -sTCP:LISTEN || echo "Port 59418 is not listening."
 
 echo ""
 echo "service app path:"

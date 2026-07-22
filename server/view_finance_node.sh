@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 
 config = json.loads(Path("$CONFIG_PATH").read_text(encoding="utf-8"))
-print(config.get("port", 31889))
+print(config.get("port", 59418))
 print(config.get("accessToken", ""))
 PY
 )"

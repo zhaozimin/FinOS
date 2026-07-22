@@ -36,6 +36,8 @@ ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024  # 10 MB hard cap per file
 # 请求体硬顶：base64 后的 10MB 附件约 13.3MB + JSON 包裹，取 32MB 覆盖合法导入/上传，
 # 读入前即拒绝超限，防超大 body 内存耗尽 DoS。
 MAX_JSON_BODY_BYTES = 32 * 1024 * 1024
+# 固定默认端口 59418（谐音"我就是要发"，讨个好彩头）。密钥仍由部署脚本每次随机生成。
+DEFAULT_PORT = 59418
 WEB_DIR = ROOT / "web"
 # 静态资源的唯一可读根：任何 _send_file 目标必须解析后仍落在此目录内，
 # 否则视为目录穿越（读 runtime/config.json 偷 token、下载整库、读任意文件）。
@@ -4675,9 +4677,9 @@ def main() -> None:
         print(f"[rates] startup fetch failed: {exc}", flush=True)
 
     host = config.get("host", "127.0.0.1")
-    port = int(config.get("port", 31888))
+    port = int(config.get("port", DEFAULT_PORT))
     # 安全告警：绑定非回环地址且未设 token = 财务 API 对网络完全裸奔。
-    # 不硬阻断（隧道/可信内网后的高级用法保留），但必须大声提醒。
+    # 不硬阻断（隧道/可信内网的高级用法保留），但必须大声提醒。
     if host not in ("127.0.0.1", "localhost", "::1") and not str(config.get("accessToken") or "").strip():
         print(
             f"⚠️  警告：绑定 {host} 且未设置 accessToken —— 财务数据将无鉴权地暴露在网络上！\n"

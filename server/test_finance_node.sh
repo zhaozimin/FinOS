@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 
 config = json.loads(Path("$CONFIG_PATH").read_text(encoding="utf-8"))
-port = config.get("port", 31889)
+port = config.get("port", 59418)
 token = config.get("accessToken", "")
 print(f"http://127.0.0.1:{port} {token}")
 PY
