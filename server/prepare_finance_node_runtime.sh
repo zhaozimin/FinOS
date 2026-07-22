@@ -127,7 +127,15 @@ iPhone App 建议填写:
 """
 Path("$INFO_PATH").write_text(info, encoding="utf-8")
 
-template = (root / "openclaw" / "finance_http_tools.template.json").read_text(encoding="utf-8")
+# 工具模板按候选路径查找：私有部署布局(openclaw/) 优先，公开仓库布局(runtime example) 兜底
+candidates = [
+    root / "openclaw" / "finance_http_tools.template.json",
+    runtime / "openclaw_finance_tools.json.example",
+]
+template_path = next((p for p in candidates if p.exists()), None)
+if template_path is None:
+    raise SystemExit("Missing openclaw tools template: " + " / ".join(str(p) for p in candidates))
+template = template_path.read_text(encoding="utf-8")
 template = template.replace("__BASE_URL__", public_url).replace("__TOKEN__", token)
 (runtime / "openclaw_finance_tools.json").write_text(template, encoding="utf-8")
 PY
