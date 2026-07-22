@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { CategoryTabs } from "./ui/Tabs";
-import { Select } from "./ui/Select";
+import { Autocomplete } from "./ui/Autocomplete";
 import { useTimeRangeStore, type TimeDimension } from "../store/timeRange";
 import { deriveBuckets, transactionMatchesRange } from "../lib/timeRange";
 import type { Transaction } from "../types";
@@ -60,10 +60,10 @@ export function TimeRangePicker({ transactions }: Props) {
       </div>
       {dimension !== "all" && dimension !== "custom" && (
         <div className="min-w-[200px]">
-          <Select
+          <Autocomplete
             label={LABEL_FOR_DIM[dimension]}
             value={effectiveBucket}
-            onChange={(e) => setBucket(e.target.value)}
+            onChange={(value) => setBucket(value)}
             options={
               buckets.length > 0
                 ? buckets

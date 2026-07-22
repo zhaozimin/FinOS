@@ -7,6 +7,7 @@ import { OverviewPage } from "./pages/OverviewPage";
 import { FlowPage } from "./pages/FlowPage";
 import { LedgerPage } from "./pages/LedgerPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { DesignSystemPage } from "./pages/DesignSystemPage";
 import { api, getToken, setToken } from "./api/client";
 
 function consumeUrlToken(): boolean {
@@ -60,6 +61,7 @@ export function App() {
             <Route path="status" element={<OverviewPage />} />
             <Route path="ledger" element={<LedgerPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="design" element={<DesignSystemPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

@@ -11,7 +11,8 @@ export type SankeySelection =
 interface Props {
   nodes: SankeyNode[];
   links: SankeyLink[];
-  height?: number;
+  /** 支持 CSS 表达式（如 calc/max），容器尺寸变化由 EChart 的 ResizeObserver 接管 */
+  height?: number | string;
   onSelect?: (selection: SankeySelection) => void;
 }
 
@@ -23,7 +24,12 @@ export function SankeyChart({ nodes, links, height = 420, onSelect }: Props) {
   const series = getSeriesPalette(isDark, paletteId);
 
   if (!nodes.length || !links.length) {
-    return <div className="empty-state">本期暂无资金流向</div>;
+    // 空态占据与图表相同的高度：容器尺寸不随数据多少改变
+    return (
+      <div className="empty-state flex items-center justify-center" style={{ height }}>
+        本期暂无资金流向
+      </div>
+    );
   }
 
   const targetNames = new Set(links.map((link) => link.target));

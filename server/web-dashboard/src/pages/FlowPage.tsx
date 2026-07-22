@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 依赖 configuration / transactions API，lib/financeAnalytics 的过滤与桑基构建。
+ * [OUTPUT]: 对外提供 FlowPage（全局资金流桑基图 + 抽屉钻取；桑基容器自适应视口高度）。
+ * [POS]: web-dashboard 首屏；全部/工作/生活 三视图 tab 仅在 ledgerMode=dual（或存在 company 账户）时显示。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { BriefcaseBusiness, CircleDollarSign, Home, WalletCards } from "lucide-react";
@@ -50,6 +56,8 @@ export function FlowPage() {
 
   const accounts = configuration?.accounts || [];
   const transactions = transactionData || [];
+  // 全部/工作/生活 三视图本质是账户归属维度；personal 模式下三者同一份数据，属噪音，隐藏。
+  const showFlowTabs = configuration?.settings?.ledgerMode === "dual" || accounts.some((account) => account.ownership === "company");
   const filtered = useMemo(
     () => filterTransactions(transactions, accounts, flowView, dimension, bucket),
     [accounts, bucket, dimension, flowView, transactions],
@@ -165,27 +173,31 @@ export function FlowPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <Card padding="lg" className="min-h-[680px]">
+    // 一屏装下：根容器 = 视口 − 顶栏(73px) − 主区上下留白(40px)；极小窗口以 560px 保底转为页面滚动
+    <div className="flex h-[calc(100vh-113px)] min-h-[560px] flex-col">
+      <Card padding="lg" className="flex min-h-0 flex-1 flex-col">
         <CardHeader className="items-start">
           <CardTitle description="保留完整路径，统一查看来源、账户、内部流转、项目、类别之间的关系。">
             全局资金流
           </CardTitle>
-          <CategoryTabs
-            value={flowView}
-            onChange={setFlowView}
-            options={FLOW_TABS}
-            ariaLabel="资金流视图"
-            variant="pills"
-          />
+          {showFlowTabs && (
+            <CategoryTabs
+              value={flowView}
+              onChange={setFlowView}
+              options={FLOW_TABS}
+              ariaLabel="资金流视图"
+              variant="pills"
+            />
+          )}
         </CardHeader>
 
-        <div className="overflow-x-auto rounded-lg border border-border bg-background/35 px-2 py-3">
-          <div className="min-w-[900px]">
+        {/* 桑基区是唯一弹性层：吃掉标题与 KPI 之外的全部剩余高度，图随容器伸缩 */}
+        <div className="min-h-0 flex-1 overflow-x-auto rounded-lg border border-border bg-background/35 px-2 py-3">
+          <div className="h-full min-w-[900px]">
             <SankeyChart
               nodes={sankey.nodes}
               links={sankey.links}
-              height={560}
+              height="100%"
               onSelect={handleSankeySelect}
             />
           </div>

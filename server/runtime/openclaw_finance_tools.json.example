@@ -44,39 +44,116 @@
       "path": "/v1/budget/status"
     },
     {
+      "name": "finance_lookup_habits",
+      "description": "Look up the user's bookkeeping habits BEFORE adding a shorthand entry (e.g. \"夜宵 10 元\"). Habits are derived live from the ledger with recency weighting — pass q (the user's own phrase) and/or category (the category you inferred). Prefer byPhrase hits over byCategory. share >= 0.7 = strong habit: auto-fill account/project/source and note the inference in your echo; otherwise confirm with the user. A single exceptional entry (e.g. one business banquet) never outweighs the daily majority.",
+      "method": "GET",
+      "path": "/v1/habits",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "User's own phrase, e.g. 夜宵 / 恰饭."
+          },
+          "category": {
+            "type": "string",
+            "description": "Inferred category name, e.g. 餐饮."
+          }
+        }
+      }
+    },
+    {
       "name": "finance_add_transaction",
-      "description": "Create a new transaction in the local ledger. The MOST common write tool. For expense/income use accountName; for transfer use fromAccountName + toAccountName. Set source='agent' so the user can audit AI-written entries.",
+      "description": "Create a new transaction in the local ledger. The MOST common write tool. For expense/income use accountName; for transfer use fromAccountName + toAccountName. Set source='agent' so the user can audit AI-written entries. GUARDRAIL: if the referenced account/category/source/project does not exist in configuration, the server returns 422 with the full list of valid options — do NOT retry blindly; ask the user to choose between creating the new master data (then use finance_manage_master_data with userConfirmation), picking an existing option, or dropping the entry.",
       "method": "POST",
       "path": "/v1/transactions",
       "inputSchema": {
         "type": "object",
-        "required": ["title", "amount", "kind"],
+        "required": [
+          "title",
+          "amount",
+          "kind"
+        ],
         "properties": {
-          "title": { "type": "string", "description": "Short description, e.g. '瑞幸咖啡' / '客户A 4月服务费'" },
-          "amount": { "type": "number", "description": "Always positive. Direction implied by kind." },
-          "kind": { "type": "string", "enum": ["expense", "income", "transfer"] },
-          "occurredAt": { "type": "string", "description": "ISO8601 datetime. Defaults to now if omitted." },
-          "accountName": { "type": "string", "description": "Required for expense/income. Must match an existing account name from /v1/configuration." },
-          "fromAccountName": { "type": "string", "description": "Required for transfer (the source account)." },
-          "toAccountName": { "type": "string", "description": "Required for transfer (the destination account)." },
-          "merchant": { "type": "string", "description": "Vendor / counterparty name shown to user." },
-          "note": { "type": "string" },
-          "tags": { "type": "array", "items": { "type": "string" } },
+          "title": {
+            "type": "string",
+            "description": "Short description, e.g. '瑞幸咖啡' / '客户A 4月服务费'"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Always positive. Direction implied by kind."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "expense",
+              "income",
+              "transfer"
+            ]
+          },
+          "occurredAt": {
+            "type": "string",
+            "description": "ISO8601 datetime. Defaults to now if omitted."
+          },
+          "accountName": {
+            "type": "string",
+            "description": "Required for expense/income. Must match an existing account name from /v1/configuration."
+          },
+          "fromAccountName": {
+            "type": "string",
+            "description": "Required for transfer (the source account)."
+          },
+          "toAccountName": {
+            "type": "string",
+            "description": "Required for transfer (the destination account)."
+          },
+          "merchant": {
+            "type": "string",
+            "description": "Vendor / counterparty name shown to user."
+          },
+          "note": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "category": {
             "type": "object",
             "description": "Either {id} (preferred — copy from /v1/configuration) or {name} (fallback — server tries name match).",
             "properties": {
-              "id": { "type": "string" },
-              "name": { "type": "string" }
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
             }
           },
-          "projectName": { "type": "string", "description": "Tag transaction to a project (must exist in configuration.settings.projects)." },
-          "sourceName": { "type": "string", "description": "Funding source label (legacy field, optional)." },
-          "counterpartyId": { "type": "string", "description": "Optional ID of a saved counterparty (from configuration.settings.counterparties)." },
+          "projectName": {
+            "type": "string",
+            "description": "Tag transaction to a project (must exist in configuration.settings.projects)."
+          },
+          "sourceName": {
+            "type": "string",
+            "description": "Funding source label (legacy field, optional)."
+          },
+          "counterpartyId": {
+            "type": "string",
+            "description": "Optional ID of a saved counterparty (from configuration.settings.counterparties)."
+          },
           "reimbursementStatus": {
             "type": "string",
-            "enum": ["draft", "submitted", "reimbursed", "rejected", "notApplicable"],
-            "description": "Default 'notApplicable'. Use 'submitted' when company-paid expense waiting for reimbursement."
+            "enum": [
+              "draft",
+              "submitted",
+              "reimbursed",
+              "rejected",
+              "notApplicable"
+            ],
+            "description": "Default notApplicable. Set 'draft' ONLY when the user explicitly says the expense is reimbursable; never mark routine expenses, or the reimbursement pie chart gets polluted."
           },
           "currency": {
             "type": "string",
@@ -92,7 +169,13 @@
           },
           "taxCategory": {
             "type": "string",
-            "enum": ["personal", "business-income", "business-expense-deductible", "business-expense-nondeductible", "transfer"],
+            "enum": [
+              "personal",
+              "business-income",
+              "business-expense-deductible",
+              "business-expense-nondeductible",
+              "transfer"
+            ],
             "description": "P3: Tax classification. Default 'personal'. Used by the tax report exporter."
           },
           "source": {
@@ -104,37 +187,74 @@
     },
     {
       "name": "finance_update_transaction",
-      "description": "Replace fields on an existing transaction (omitted fields keep their old values). Path param: id (transaction id).",
+      "description": "Replace fields on an existing transaction (omitted fields keep their old values). Path param: id (transaction id). GUARDRAIL: if the referenced account/category/source/project does not exist in configuration, the server returns 422 with the full list of valid options — do NOT retry blindly; ask the user to choose between creating the new master data (then use finance_manage_master_data with userConfirmation), picking an existing option, or dropping the entry.",
       "method": "PUT",
       "path": "/v1/transactions/{id}",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "title": { "type": "string" },
-          "amount": { "type": "number" },
-          "occurredAt": { "type": "string" },
-          "merchant": { "type": "string" },
-          "note": { "type": "string" },
-          "tags": { "type": "array", "items": { "type": "string" } },
-          "category": { "type": "object" },
-          "projectName": { "type": "string" },
-          "counterpartyId": { "type": "string" },
+          "title": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "merchant": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "category": {
+            "type": "object"
+          },
+          "projectName": {
+            "type": "string"
+          },
+          "counterpartyId": {
+            "type": "string"
+          },
           "reimbursementStatus": {
             "type": "string",
-            "enum": ["draft", "submitted", "reimbursed", "rejected", "notApplicable"]
+            "enum": [
+              "draft",
+              "submitted",
+              "reimbursed",
+              "rejected",
+              "notApplicable"
+            ]
           },
-          "invoiceIssued": { "type": "boolean" },
-          "invoiceAttachmentId": { "type": "string" },
+          "invoiceIssued": {
+            "type": "boolean"
+          },
+          "invoiceAttachmentId": {
+            "type": "string"
+          },
           "taxCategory": {
             "type": "string",
-            "enum": ["personal", "business-income", "business-expense-deductible", "business-expense-nondeductible", "transfer"]
+            "enum": [
+              "personal",
+              "business-income",
+              "business-expense-deductible",
+              "business-expense-nondeductible",
+              "transfer"
+            ]
           }
         }
       }
     },
     {
       "name": "finance_delete_transaction",
-      "description": "Delete a transaction (also cascades attachment files). Path param: id. Use sparingly — prefer correcting via finance_update_transaction.",
+      "description": "Soft-delete a transaction while preserving it in the ledger audit trail. The dashboard renders it gray with a red strike-through and it no longer affects totals. Path param: id. Use sparingly — prefer correcting via finance_update_transaction.",
       "method": "DELETE",
       "path": "/v1/transactions/{id}"
     },
@@ -145,11 +265,19 @@
       "path": "/v1/transactions/{id}/reimbursement",
       "inputSchema": {
         "type": "object",
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["draft", "submitted", "reimbursed", "rejected", "notApplicable"]
+            "enum": [
+              "draft",
+              "submitted",
+              "reimbursed",
+              "rejected",
+              "notApplicable"
+            ]
           }
         }
       }
@@ -161,11 +289,23 @@
       "path": "/v1/transactions/{id}/attachments",
       "inputSchema": {
         "type": "object",
-        "required": ["filename", "mime", "data"],
+        "required": [
+          "filename",
+          "mime",
+          "data"
+        ],
         "properties": {
-          "filename": { "type": "string" },
-          "mime": { "type": "string", "description": "e.g. 'image/jpeg' / 'image/png' / 'application/pdf'" },
-          "data": { "type": "string", "description": "Base64-encoded file bytes. If your runtime saved the user's image to a local file (agent gateways usually note its path), read that file and base64-encode its raw bytes here — do NOT transcribe or describe the image." }
+          "filename": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string",
+            "description": "e.g. 'image/jpeg' / 'image/png' / 'application/pdf'"
+          },
+          "data": {
+            "type": "string",
+            "description": "Base64-encoded file bytes."
+          }
         }
       }
     },
@@ -182,16 +322,50 @@
       "path": "/v1/recurring",
       "inputSchema": {
         "type": "object",
-        "required": ["name", "frequency", "intervalN", "startDate", "nextDueAt", "template"],
+        "required": [
+          "name",
+          "frequency",
+          "intervalN",
+          "startDate",
+          "nextDueAt",
+          "template"
+        ],
         "properties": {
-          "name": { "type": "string" },
-          "frequency": { "type": "string", "enum": ["daily", "weekly", "monthly", "yearly"] },
-          "intervalN": { "type": "integer", "description": "Repeat every N units (e.g. 1=every month, 3=every 3 months)." },
-          "dayOfPeriod": { "type": "integer", "description": "Day-of-month for monthly/yearly (1-31, end-of-month auto-clamped)." },
-          "startDate": { "type": "string", "description": "ISO date YYYY-MM-DD" },
-          "endDate": { "type": "string" },
-          "nextDueAt": { "type": "string", "description": "ISO date when next instance fires." },
-          "enabled": { "type": "boolean", "description": "Default true." },
+          "name": {
+            "type": "string"
+          },
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "weekly",
+              "monthly",
+              "yearly"
+            ]
+          },
+          "intervalN": {
+            "type": "integer",
+            "description": "Repeat every N units (e.g. 1=every month, 3=every 3 months)."
+          },
+          "dayOfPeriod": {
+            "type": "integer",
+            "description": "Day-of-month for monthly/yearly (1-31, end-of-month auto-clamped)."
+          },
+          "startDate": {
+            "type": "string",
+            "description": "ISO date YYYY-MM-DD"
+          },
+          "endDate": {
+            "type": "string"
+          },
+          "nextDueAt": {
+            "type": "string",
+            "description": "ISO date when next instance fires."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Default true."
+          },
           "template": {
             "type": "object",
             "description": "Same shape as a finance_add_transaction body. Required: title, amount, kind, accountName (or from/to for transfer)."
@@ -204,6 +378,65 @@
       "description": "P4: Force-refresh exchange rates from open.er-api.com. Returns the updated exchangeRates object. Useful when settings.exchangeRates.autoFetch is off and the user wants the latest cross-currency conversions.",
       "method": "POST",
       "path": "/v1/rates/refresh"
+    },
+    {
+      "name": "finance_manage_master_data",
+      "description": "Manage one account, category, or finance source for the user. MUST read finance_get_configuration first. GUARDRAIL: the server rejects any create/update/delete/restore without userConfirmation (HTTP 422). You may only PROPOSE master-data changes — present the plan and alternatives to the user in chat, wait for an explicit yes, then call this tool with userConfirmation set to the user's own confirming words. Never invent or assume confirmation. action=delete is a reversible soft-delete: the dashboard keeps the object visible in gray/red and reports its financial impact. Every successful operation creates a local Git database checkpoint.",
+      "method": "POST",
+      "path": "/v1/agent/operations",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "entityType",
+          "action",
+          "userConfirmation"
+        ],
+        "properties": {
+          "entityType": {
+            "type": "string",
+            "enum": [
+              "account",
+              "category",
+              "financeSource"
+            ]
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "update",
+              "delete",
+              "restore"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "Required except for create; copy the existing ID from configuration."
+          },
+          "actor": {
+            "type": "string",
+            "description": "Agent identity, for example openclaw-mobile."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Required in spirit for delete: concise user-approved reason."
+          },
+          "data": {
+            "type": "object",
+            "description": "Fields to create or update. Account creation needs at least name, type, currency and ownership; category/source creation needs name."
+          },
+          "userConfirmation": {
+            "type": "string",
+            "description": "The user's literal confirming reply from this conversation (e.g. \"对，新建 AI 专用账户\"). Stored in the audit event. Server returns 422 if missing."
+          }
+        }
+      }
+    },
+    {
+      "name": "finance_list_audit_events",
+      "description": "Read the latest Agent and dashboard change records, including deleted transactions/accounts and their recorded financial impact. Query param: limit (1-500).",
+      "method": "GET",
+      "path": "/v1/audit/events"
     }
   ]
 }

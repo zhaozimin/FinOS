@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖财务领域类型与时间范围筛选规则。
+ * [OUTPUT]: 对外提供余额、流水归属、汇总与图表数据转换函数。
+ * [POS]: web-dashboard 的纯业务分析层；为页面和图表隔离原始 API 数据中的边界情况。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import type {
   Account,
   AccountOwnership,
@@ -131,15 +138,36 @@ export function buildSankey(transactions: Transaction[], accounts: Account[]) {
   const accountNames = new Set(accounts.map((account) => account.name));
   const links = new Map<string, number>();
   const nodeColor = new Map<string, string>();
+  const adjacency = new Map<string, Set<string>>();
 
   const remember = (name: string, color: string) => {
     if (!nodeColor.has(name)) nodeColor.set(name, color);
   };
 
-  const add = (source: string, target: string, value: number) => {
+  const canReach = (from: string, target: string): boolean => {
+    const visited = new Set<string>();
+    const pending = [from];
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      if (current === target) return true;
+      if (visited.has(current)) continue;
+      visited.add(current);
+      for (const next of adjacency.get(current) || []) pending.push(next);
+    }
+    return false;
+  };
+
+  const add = (source: string, target: string, value: number, sourceColor: string, targetColor: string) => {
     if (!source || !target || value <= 0) return;
+    // ECharts Sankey 只接受有向无环图。真实账本允许来源与账户同名或资金往返，
+    // 但这类边无法被桑基图表达，必须在展示模型中跳过，绝不能让它炸掉整个页面。
+    if (source === target || canReach(target, source)) return;
     const key = `${source}__${target}`;
     links.set(key, (links.get(key) || 0) + value);
+    remember(source, sourceColor);
+    remember(target, targetColor);
+    if (!adjacency.has(source)) adjacency.set(source, new Set());
+    adjacency.get(source)!.add(target);
   };
 
   const accountColor = (name: string) =>
@@ -153,26 +181,19 @@ export function buildSankey(transactions: Transaction[], accounts: Account[]) {
 
     if (tx.kind === "income") {
       const target = tx.toAccountName || tx.accountName || "未命名账户";
-      remember(sourceName, "#87b99b");
-      remember(target, accountColor(target));
-      add(sourceName, target, amount);
+      add(sourceName, target, amount, "#87b99b", accountColor(target));
     }
 
     if (tx.kind === "transfer") {
       const source = tx.fromAccountName || tx.accountName || "转出账户";
       const target = tx.toAccountName || "转入账户";
-      remember(source, accountColor(source));
-      remember(target, accountColor(target));
-      add(source, target, amount);
+      add(source, target, amount, accountColor(source), accountColor(target));
     }
 
     if (tx.kind === "expense") {
       const source = tx.fromAccountName || tx.accountName || "支出账户";
-      remember(source, accountColor(source));
-      remember(projectName, "#c69a7d");
-      remember(categoryName, "#e09672");
-      add(source, projectName, amount);
-      if (projectName !== categoryName) add(projectName, categoryName, amount);
+      add(source, projectName, amount, accountColor(source), "#c69a7d");
+      if (projectName !== categoryName) add(projectName, categoryName, amount, "#c69a7d", "#e09672");
     }
   }
 

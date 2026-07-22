@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 ui/Button、ui/Badge、lib/financeAnalytics 汇总、lib/useBodyScrollLock、
+ *   index.css 的 animate-overlay-in / animate-drawer-up 动效类。
+ * [OUTPUT]: 对外提供 TransactionDrawer —— 底部上滑的流水明细抽屉，图表/看板钻取的通用容器。
+ * [POS]: OverviewPage 与 FlowPage 点击图表节点后的明细层；z-70，低于编辑弹窗 z-80。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 import { memo, useEffect, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Hash, TrendingDown, TrendingUp } from "lucide-react";
@@ -63,11 +70,11 @@ export const TransactionDrawer = memo(function TransactionDrawer({
       <button
         type="button"
         aria-label="关闭流水抽屉遮罩"
-        className="absolute inset-0 bg-black/45"
+        className="animate-overlay-in absolute inset-0 bg-black/45"
         onClick={onClose}
       />
       <section
-        className="absolute inset-x-0 bottom-0 mx-auto flex h-[72vh] max-h-[820px] min-h-[360px] w-full max-w-6xl flex-col rounded-t-xl border border-border bg-card text-card-foreground shadow-[0_-24px_90px_rgba(0,0,0,0.35)]"
+        className="animate-drawer-up absolute inset-x-0 bottom-0 mx-auto flex h-[72vh] max-h-[820px] min-h-[360px] w-full max-w-6xl flex-col rounded-t-xl border border-border bg-card text-card-foreground shadow-[0_-24px_90px_rgba(0,0,0,0.35)]"
       >
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div>

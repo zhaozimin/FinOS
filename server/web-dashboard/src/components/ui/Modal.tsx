@@ -58,12 +58,12 @@ export function Modal({
       <button
         type="button"
         aria-label="关闭"
-        className={clsx("absolute inset-0 bg-black/50", blurBackdrop && "backdrop-blur-[2px]")}
+        className={clsx("animate-overlay-in absolute inset-0 bg-black/50", blurBackdrop && "backdrop-blur-[2px]")}
         onClick={onClose}
       />
       <div
         className={clsx(
-          "relative w-full bg-card text-card-foreground rounded-xl border border-border shadow-2xl flex flex-col max-h-[calc(100vh-3rem)]",
+          "animate-modal-in relative w-full bg-card text-card-foreground rounded-xl border border-border shadow-2xl flex flex-col max-h-[calc(100vh-3rem)]",
           sizeClass[size],
         )}
       >

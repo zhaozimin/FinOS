@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ExternalLink, Github } from "lucide-react";
+import { ArrowRight, ExternalLink } from "lucide-react";
 import { api, setToken } from "../api/client";
 
 interface Props {
   onAuthenticated: () => void;
 }
 
-const HELP_URL = "https://zhaozimin.com";
-const GITHUB_URL = "https://github.com/zhaozimin/FinOS";
+const HELP_URL = "https://github.com/zhaozimin/FinOS";
 const MONO = `Menlo, Monaco, Consolas, "Courier New", monospace`;
 
 export function TokenGate({ onAuthenticated }: Props) {
@@ -59,31 +58,18 @@ export function TokenGate({ onAuthenticated }: Props) {
 
       <header className="fixed inset-x-0 top-0 z-30 flex h-[60px] items-center justify-between px-5 sm:px-8">
         <span className="brand-logo select-none text-[22px] font-semibold leading-none text-white">
-          赵子民<span style={{ color: "var(--brand-red)" }}>.</span>
+          FinOS<span style={{ color: "var(--brand-red)" }}>.</span>
         </span>
-        <div className="flex items-center gap-2 sm:gap-2.5">
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="GitHub 开源仓库"
-            className="inline-flex items-center gap-1.5 border border-white/40 px-3 py-2 text-[11px] font-medium uppercase tracking-[1.8px] text-white/85 transition-colors hover:border-white hover:bg-white hover:text-black"
-            style={{ fontFamily: MONO }}
-          >
-            <Github size={13} />
-            GitHub
-          </a>
-          <a
-            href={HELP_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 border border-white/40 px-3 py-2 text-[11px] font-medium uppercase tracking-[1.8px] text-white/85 transition-colors hover:border-white hover:bg-white hover:text-black"
-            style={{ fontFamily: MONO }}
-          >
-            详细使用说明
-            <ExternalLink size={12} />
-          </a>
-        </div>
+        <a
+          href={HELP_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 border border-white/40 px-3 py-2 text-[11px] font-medium uppercase tracking-[1.8px] text-white/85 transition-colors hover:border-white hover:bg-white hover:text-black"
+          style={{ fontFamily: MONO }}
+        >
+          详细使用说明
+          <ExternalLink size={12} />
+        </a>
       </header>
 
       <main className="relative z-10 flex min-h-screen items-center justify-center px-5 pb-12 pt-[60px]">

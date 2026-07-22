@@ -26,8 +26,8 @@
 npx -y skills add zhaozimin/FinOS -g --all
 ```
 
-> 装好后，你的 AI 就听得懂「中午吃麦当劳花了 38」并直接写进账本。
-> 想让它真正落库，还需要本机跑起 FinOS 服务 —— 见下方 **一句话部署**。
+> 装好后你的 AI 同时获得两个技能：**部署员**（对它说「帮我部署 FinOS」，它就把本机服务装好并交付登录地址）和 **AI 记账员**（听得懂「中午吃麦当劳花了 38」并直接写进账本）。
+> 也可以不装技能，直接用下方 **一句话部署**。
 
 ### 一句话部署服务端
 
@@ -197,6 +197,7 @@ rm -rf ../web && cp -R dist ../web
 | [`docs/openclaw-integration.md`](./docs/openclaw-integration.md) | OpenClaw / LLM Agent 接入 3 步 + 附件流程 |
 | [`docs/tailscale-setup.md`](./docs/tailscale-setup.md) | Tailscale 远程访问详解 |
 | [`skills/ai-bookkeeper/SKILL.md`](./skills/ai-bookkeeper/SKILL.md) | 给 AI 用的完整记账 skill |
+| [`skills/finos-deploy/SKILL.md`](./skills/finos-deploy/SKILL.md) | 给编码 Agent 用的一键部署 skill |
 | [`docs/guides/features-guide.html`](./docs/guides/features-guide.html) | 给最终用户看的图文功能手册 |
 
 ---

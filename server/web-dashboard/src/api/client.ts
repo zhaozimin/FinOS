@@ -1,8 +1,8 @@
 /**
- * Finance Node API 客户端。
- *
- * 认证：所有受保护端点要求 Authorization: Bearer <token>。
- * Token 通过 localStorage 持久化，首次访问由 TokenGate 组件采集。
+ * [INPUT]: 依赖浏览器 token、Finance Node HTTP API 与共享领域类型。
+ * [OUTPUT]: 对外提供认证请求、账本查询及配置保存方法。
+ * [POS]: web-dashboard 的唯一 HTTP 边界；页面不直接调用 fetch。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 const TOKEN_STORAGE_KEY = "finance-node-token";
@@ -100,6 +100,7 @@ export const api = {
     q?: string;
     categoryId?: string;
     accountName?: string;
+    includeDeleted?: 0 | 1;
     limit?: number;
   }) {
     return request<import("../types").Transaction[]>("GET", "/v1/transactions", { params });
@@ -124,6 +125,15 @@ export const api = {
       "PATCH",
       `/v1/transactions/${encodeURIComponent(id)}/reimbursement`,
       { body: { status } },
+    );
+  },
+
+  /** 回款核销：一笔报销回款收入 ↔ 多笔垫付支出的批量对账 */
+  settleReimbursement(payload: { incomeId: string; settleIds: string[]; unsettleIds: string[] }) {
+    return request<{ ok: true; incomeId: string; settled: number; unsettled: number; invalid: string[] }>(
+      "POST",
+      "/v1/reimbursements/settle",
+      { body: payload },
     );
   },
 

@@ -1,9 +1,14 @@
 /**
- * 与 finance_node_server.py 对齐的数据类型。
- * 字段口径见 docs/hubu-bookkeeping-technical.md。
+ * [INPUT]: 依赖 finance_node_server.py 返回的账本、主数据与删除审计字段。
+ * [OUTPUT]: 对外提供 React 页面共享的财务领域类型。
+ * [POS]: web-dashboard/src 的 API 契约根；被页面、组件与 API 客户端共同消费。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 export type ViewMode = "company" | "personal" | "combined";
+
+// 记账模式：personal = 个人（隐藏归属/经营/税务等维度）；dual = 个人 + 经营（全量形态）
+export type LedgerMode = "personal" | "dual";
 
 export type AccountOwnership = "company" | "personal" | "unspecified";
 
@@ -37,6 +42,9 @@ export interface CategoryRef {
   projectId?: string;
   note?: string;
   monthlyBudget?: number;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+  deletionReason?: string | null;
 }
 
 export interface BudgetStatusItem {
@@ -100,6 +108,10 @@ export interface Account {
   classification?: AccountClassification;
   creditLimit?: number;
   availableCredit?: number;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+  deletionReason?: string | null;
+  deletionImpact?: { balance: number; assetDelta: number; liabilityDelta: number; netWorthDelta: number };
 }
 
 export interface ProjectGoal {
@@ -129,6 +141,9 @@ export interface FinanceSource {
   defaultAccountId?: string;
   note?: string;
   tintHex?: string;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+  deletionReason?: string | null;
 }
 
 export type CounterpartyKind = "client" | "vendor" | "employer" | "other";
@@ -164,6 +179,7 @@ export interface ExchangeRates {
 
 export interface LedgerSettings {
   bookMode: string;
+  ledgerMode?: LedgerMode;
   defaultCurrency: string;
   baseUnit: string;
   timezone: string;
@@ -205,6 +221,8 @@ export interface Transaction {
   projectName?: string | null;
   note: string;
   reimbursementStatus: ReimbursementStatus;
+  /** 覆盖这笔垫付的回款收入 id；NULL = 未核销或快捷按钮手动标记 */
+  reimbursedBy?: string | null;
   source: string;
   sourceName?: string | null;
   counterpartyId?: string | null;
@@ -214,6 +232,10 @@ export interface Transaction {
   currency?: string | null;
   amountInBaseCurrency?: number | null;
   attachments?: AttachmentRef[];
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+  deletionReason?: string | null;
+  deletionOperationId?: string | null;
 }
 
 export interface MonthSummary {

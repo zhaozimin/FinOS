@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Trash2, X } from "lucide-react";
 import { api } from "../api/client";
 import { useBodyScrollLock } from "../lib/useBodyScrollLock";
+import { AlertDialog } from "./ui/AlertDialog";
 import type { AttachmentRef } from "../types";
 
 interface Props {
@@ -16,6 +17,8 @@ interface Props {
 export function AttachmentLightbox({ open, attachments, initialIndex = 0, onClose, onDelete }: Props) {
   const [index, setIndex] = useState(initialIndex);
   const [busy, setBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [failMessage, setFailMessage] = useState<string | null>(null);
   useBodyScrollLock(open);
 
   useEffect(() => {
@@ -46,12 +49,12 @@ export function AttachmentLightbox({ open, attachments, initialIndex = 0, onClos
 
   const current = attachments[index];
 
-  const handleDelete = async () => {
+  const performDelete = async () => {
     if (!current || busy) return;
-    if (!confirm(`确定删除附件 "${current.originalName}"？此操作不可恢复。`)) return;
     setBusy(true);
     try {
       await api.deleteAttachment(current.id);
+      setConfirmOpen(false);
       onDelete?.(current.id);
       // 自动跳到下一张或关闭
       if (attachments.length <= 1) {
@@ -60,7 +63,8 @@ export function AttachmentLightbox({ open, attachments, initialIndex = 0, onClos
         setIndex((i) => Math.min(i, attachments.length - 2));
       }
     } catch (err) {
-      alert(`删除失败：${(err as Error).message || "未知错误"}`);
+      setConfirmOpen(false);
+      setFailMessage((err as Error).message || "未知错误");
     } finally {
       setBusy(false);
     }
@@ -81,7 +85,7 @@ export function AttachmentLightbox({ open, attachments, initialIndex = 0, onClos
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={handleDelete}
+            onClick={() => current && !busy && setConfirmOpen(true)}
             disabled={busy}
             title="删除附件"
             aria-label="删除附件"
@@ -145,6 +149,24 @@ export function AttachmentLightbox({ open, attachments, initialIndex = 0, onClos
           </button>
         </>
       )}
+
+      <AlertDialog
+        open={confirmOpen}
+        tone="destructive"
+        title="删除附件"
+        description={`确定删除附件「${current.originalName}」？此操作不可恢复。`}
+        confirmLabel="删除"
+        busy={busy}
+        onConfirm={performDelete}
+        onCancel={() => setConfirmOpen(false)}
+      />
+      <AlertDialog
+        open={failMessage !== null}
+        title="删除失败"
+        description={failMessage}
+        confirmLabel="知道了"
+        onConfirm={() => setFailMessage(null)}
+      />
     </div>,
     document.body,
   );

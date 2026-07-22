@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Paperclip, Repeat, Trash2 } from "lucide-react";
 import { Button } from "./ui/Button";
 import { TextInput } from "./ui/TextInput";
-import { Select } from "./ui/Select";
+import { Autocomplete } from "./ui/Autocomplete";
 import { CategoryTabs } from "./ui/Tabs";
 import { Badge } from "./ui/Badge";
 import { Modal } from "./ui/Modal";
@@ -348,42 +348,52 @@ export function TransactionEditSheet({ open, onClose, onSaved, onDeleted, initia
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Select
+          <Autocomplete
             label={kind === "income" ? "入账账户" : "出账账户"}
             value={accountName}
-            onChange={(e) => setAccountName(e.target.value)}
+            onChange={(value) => setAccountName(value)}
             options={[{ value: "", label: "（请选择）" }, ...accountOptions]}
+            placeholder="选择账户…"
+            searchPlaceholder="搜索账户…"
           />
           {kind === "transfer" && (
-            <Select
+            <Autocomplete
               label="转入账户"
               value={toAccountName}
-              onChange={(e) => setToAccountName(e.target.value)}
+              onChange={(value) => setToAccountName(value)}
               options={[{ value: "", label: "（请选择）" }, ...accountOptions]}
+              placeholder="选择账户…"
+              searchPlaceholder="搜索账户…"
             />
           )}
           {kind !== "transfer" && (
-            <Select
+            <Autocomplete
               label="分类"
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              onChange={(value) => setCategoryId(value)}
               options={categoryOptions}
+              placeholder="选择分类…"
+              searchPlaceholder="搜索分类…"
             />
           )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Select
+          <Autocomplete
             label="项目"
             value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
+            onChange={(value) => setProjectName(value)}
             options={projectOptions}
+            placeholder="选择项目…"
+            searchPlaceholder="搜索项目…"
           />
-          <Select
+          <Autocomplete
             label="对手方 / 客户"
             value={counterpartyId}
-            onChange={(e) => setCounterpartyId(e.target.value)}
+            onChange={(value) => setCounterpartyId(value)}
             options={counterpartyOptions}
+            placeholder="选择对手方…"
+            searchPlaceholder="搜索对手方…"
           />
         </div>
 
@@ -493,16 +503,14 @@ export function TransactionEditSheet({ open, onClose, onSaved, onDeleted, initia
                 ) : attachments.length > 0 ? (
                   <div>
                     <div className="mb-1">从已上传的附件中选一个作为发票：</div>
-                    <select
+                    <Autocomplete
+                      size="sm"
+                      ariaLabel="选择发票附件"
                       value=""
-                      onChange={(event) => setInvoiceAttachmentId(event.target.value || null)}
-                      className="h-8 w-full rounded-md border border-border bg-background px-2 text-[12.5px]"
-                    >
-                      <option value="">— 选择发票附件 —</option>
-                      {attachments.map((a) => (
-                        <option key={a.id} value={a.id}>{a.originalName}</option>
-                      ))}
-                    </select>
+                      onChange={(value) => setInvoiceAttachmentId(value || null)}
+                      placeholder="— 选择发票附件 —"
+                      options={attachments.map((a) => ({ value: a.id, label: a.originalName }))}
+                    />
                   </div>
                 ) : (
                   <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-300">
@@ -515,10 +523,10 @@ export function TransactionEditSheet({ open, onClose, onSaved, onDeleted, initia
         )}
 
         {(kind === "income" || kind === "expense") && (
-          <Select
+          <Autocomplete
             label="税务分类"
             value={taxCategory}
-            onChange={(e) => setTaxCategory(e.target.value as TaxCategory)}
+            onChange={(value) => setTaxCategory(value as TaxCategory)}
             options={TAX_CATEGORY_OPTIONS}
           />
         )}
@@ -549,10 +557,10 @@ export function TransactionEditSheet({ open, onClose, onSaved, onDeleted, initia
                 placeholder="例：Netflix 月度订阅"
               />
               <div className="grid grid-cols-2 gap-3">
-                <Select
+                <Autocomplete
                   label="频率"
                   value={recurringFreq}
-                  onChange={(e) => setRecurringFreq(e.target.value as RecurringFrequency)}
+                  onChange={(value) => setRecurringFreq(value as RecurringFrequency)}
                   options={FREQ_OPTIONS}
                 />
                 <TextInput

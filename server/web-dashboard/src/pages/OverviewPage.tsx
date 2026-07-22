@@ -1,7 +1,14 @@
+/**
+ * [INPUT]: 依赖 configuration/transactions/budget API、store/dashboardLayout 的 widget 布局、
+ *   各看板卡片组件与 lib/financeAnalytics 汇总。
+ * [OUTPUT]: 对外提供 OverviewPage —— 财务状况看板，widget 化的 KPI 与图表集合。
+ * [POS]: 纯报表页——不承载任何配置入口；widget 显隐/排序在「财务设置 → 仪表盘」中调整。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { EChartsOption } from "echarts";
-import { Activity, BellRing, Landmark, LayoutDashboard, TrendingUp } from "lucide-react";
+import { Activity, BellRing, Landmark, TrendingUp } from "lucide-react";
 import { Card, CardTitle } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { CategoryTabs } from "../components/ui/Tabs";
@@ -12,7 +19,8 @@ import { SavingsGoalCard, buildSavingsGoalSummaries } from "../components/Saving
 import { CashflowForecastCard } from "../components/CashflowForecastCard";
 import { SubscriptionsCard } from "../components/SubscriptionsCard";
 import { InvoiceWorkbench } from "../components/InvoiceWorkbench";
-import { DashboardCustomizer } from "../components/DashboardCustomizer";
+import { ReimbursementPieCard } from "../components/ReimbursementPieCard";
+import { isReimbursable } from "../lib/reimbursement";
 import { TransactionDrawer } from "../components/TransactionDrawer";
 import { TransactionEditSheet } from "../components/TransactionEditSheet";
 import { api } from "../api/client";
@@ -51,7 +59,6 @@ export function OverviewPage() {
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
   const [editTarget, setEditTarget] = useState<Transaction | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [customizerOpen, setCustomizerOpen] = useState(false);
   const widgetLayout = useDashboardLayoutStore((s) => s.widgets);
   const resolved = useThemeStore((s) => s.resolved);
   const paletteId = useThemeStore((s) => s.palette);
@@ -225,6 +232,33 @@ export function OverviewPage() {
             onSelectTransaction={(tx) => openEditor(tx)}
           />
         </div>
+      </Card>
+    ),
+    "reimbursement-pie": () => (
+      <Card padding="none">
+        <div className="border-b border-border px-5 py-4">
+          <CardTitle description="所有标记了报销状态的支出（不随统计区间过滤），点击扇区查看对应流水。">
+            报销总览
+          </CardTitle>
+        </div>
+        {transactions.some(isReimbursable) ? (
+          <div className="px-5 py-5">
+            <ReimbursementPieCard
+              transactions={transactions}
+              onSelect={(_status, label, items) =>
+                openDrawer({
+                  title: `报销 · ${label}`,
+                  description: `${items.length} 笔，合计 ${formatCurrency(items.reduce((sum, tx) => sum + tx.amount, 0))}。点击任意一笔可修改报销状态。`,
+                  transactions: items,
+                })
+              }
+            />
+          </div>
+        ) : (
+          <div className="px-5 py-8 text-center text-[13px] text-muted-foreground">
+            还没有报销相关的支出 — 记账时说明"可以报销"，或在「编辑流水」里把报销状态设为「待报销」。
+          </div>
+        )}
       </Card>
     ),
     "tax-kpi": () =>
@@ -436,17 +470,6 @@ export function OverviewPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
-        <Button
-          variant="outline"
-          size="sm"
-          leading={<LayoutDashboard size={13} />}
-          onClick={() => setCustomizerOpen(true)}
-        >
-          自定义仪表盘
-        </Button>
-      </div>
-
       {widgetLayout.map((w) => {
         if (!w.visible) return null;
         const renderer = widgetRenderers[w.id];
@@ -455,8 +478,6 @@ export function OverviewPage() {
         if (!node) return null;
         return <div key={w.id}>{node}</div>;
       })}
-
-      <DashboardCustomizer open={customizerOpen} onClose={() => setCustomizerOpen(false)} />
 
       <TransactionDrawer
         open={Boolean(drawer)}

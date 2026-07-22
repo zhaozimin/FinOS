@@ -6,7 +6,9 @@ import type { Project, Transaction } from "../types";
 import { api } from "../api/client";
 import { useApi } from "../lib/useApi";
 import { formatCurrency } from "../lib/format";
+import { useBodyScrollLock } from "../lib/useBodyScrollLock";
 import { EChart } from "./charts/EChart";
+import { AlertDialog } from "./ui/AlertDialog";
 import { useThemeStore } from "../store/theme";
 import { getPalette } from "./charts/theme";
 
@@ -23,6 +25,7 @@ export function ProjectPLDrawer({ open, project, onClose, onEditTransaction }: P
   const palette = getPalette(resolved === "dark", paletteId);
   const printableRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const exportPdf = async () => {
     if (!printableRef.current || !project) return;
@@ -74,7 +77,7 @@ export function ProjectPLDrawer({ open, project, onClose, onEditTransaction }: P
       pdf.save(`${project.name}-PL-${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (err) {
       console.error("PDF export failed", err);
-      alert(`PDF 导出失败：${(err as Error).message || "未知错误"}`);
+      setExportError((err as Error).message || "未知错误");
     } finally {
       setExporting(false);
     }
@@ -85,16 +88,16 @@ export function ProjectPLDrawer({ open, project, onClose, onEditTransaction }: P
     [project?.id, open],
   );
 
+  useBodyScrollLock(open);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
     };
   }, [open, onClose]);
 
@@ -327,6 +330,14 @@ export function ProjectPLDrawer({ open, project, onClose, onEditTransaction }: P
           </section>
         </div>
       </aside>
+
+      <AlertDialog
+        open={exportError !== null}
+        title="PDF 导出失败"
+        description={exportError}
+        confirmLabel="知道了"
+        onConfirm={() => setExportError(null)}
+      />
     </div>,
     document.body,
   );

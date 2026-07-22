@@ -1,22 +1,36 @@
+/**
+ * [INPUT]: 依赖配置 API、主数据类型和设置面板组件。
+ * [OUTPUT]: 对外提供 SettingsPage，并在账户卡中保留已删除状态及资金影响。
+ * [POS]: web-dashboard 的主数据配置中心；已删除账户可见但不再作为活跃账户编辑。
+ *   记账模式（settings.ledgerMode）为总门控：personal 隐藏归属选择器 + 客户合作方 + 税务面板，
+ *   类别管理按收/支分 tab 并以行 + 编辑弹窗呈现（转账等系统类别不入列表）。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { AlertCircle, BarChart3, Calculator, CheckCircle2, CircleDollarSign, CreditCard, Database, FileSpreadsheet, FileUp, FolderKanban, Globe2, History, Percent, Plus, Receipt, Repeat, Save, Tags, Trash2, TrendingUp, Upload, UserSquare } from "lucide-react";
+import { BarChart3, Calculator, CircleDollarSign, CreditCard, Database, FileSpreadsheet, FileUp, FolderKanban, Globe2, History, LayoutDashboard, Pencil, Percent, Plus, Receipt, Repeat, Save, Tags, Trash2, TrendingUp, Upload, UserSquare } from "lucide-react";
 import clsx from "clsx";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { TextInput } from "../components/ui/TextInput";
-import { Select } from "../components/ui/Select";
+import { Autocomplete } from "../components/ui/Autocomplete";
+import { Modal } from "../components/ui/Modal";
+import { AlertDialog } from "../components/ui/AlertDialog";
+import { StatusPill } from "../components/ui/StatusPill";
+import { DatePicker } from "../components/ui/DatePicker";
+import { SegmentedSwitch } from "../components/ui/SegmentedSwitch";
 import { CategoryTabs } from "../components/ui/Tabs";
 import { ProjectPLDrawer } from "../components/ProjectPLDrawer";
 import { AdjustmentHistoryDrawer } from "../components/AdjustmentHistoryDrawer";
 import { TransactionEditSheet } from "../components/TransactionEditSheet";
+import { DashboardCustomizer } from "../components/DashboardCustomizer";
 import { api } from "../api/client";
 import { useApi } from "../lib/useApi";
 import { formatCurrency } from "../lib/format";
-import type { Account, AccountClassification, AccountOwnership, CategoryRef, Configuration, Counterparty, CounterpartyKind, ExchangeRates, FinanceSource, Project, ProjectGoal, RecurringFrequency, RecurringRule, Transaction, TransactionKind } from "../types";
+import type { Account, AccountClassification, AccountOwnership, CategoryRef, Configuration, Counterparty, CounterpartyKind, ExchangeRates, FinanceSource, LedgerMode, Project, ProjectGoal, RecurringFrequency, RecurringRule, Transaction, TransactionKind } from "../types";
 
-type SettingsPanel = "currency" | "accounts" | "projects" | "sources" | "categories" | "counterparties" | "recurring" | "import" | "tax";
+type SettingsPanel = "currency" | "accounts" | "projects" | "sources" | "categories" | "counterparties" | "recurring" | "import" | "tax" | "dashboard";
 
 const FREQUENCY_OPTIONS: Array<{ value: RecurringFrequency; label: string }> = [
   { value: "daily", label: "每天" },
@@ -58,6 +72,11 @@ const OWNERSHIP_OPTIONS: Array<{ value: AccountOwnership; label: string }> = [
   { value: "unspecified", label: "未指定" },
 ];
 
+const LEDGER_MODE_OPTIONS: Array<{ value: LedgerMode; label: string }> = [
+  { value: "personal", label: "个人记账" },
+  { value: "dual", label: "个人 + 经营" },
+];
+
 const CLASSIFICATION_OPTIONS: Array<{ value: AccountClassification; label: string }> = [
   { value: "asset", label: "资产" },
   { value: "liability", label: "负债（信用卡 / 贷款）" },
@@ -86,6 +105,7 @@ const SETTINGS_PANEL_OPTIONS: Array<{ value: SettingsPanel; label: string }> = [
   { value: "recurring", label: "周期账目" },
   { value: "import", label: "账单导入" },
   { value: "tax", label: "税务设置" },
+  { value: "dashboard", label: "仪表盘" },
 ];
 
 export function SettingsPage() {
@@ -143,13 +163,24 @@ export function SettingsPage() {
   }
   if (!draft) return null;
 
-  const totalBalance = draft.accounts.reduce(
+  const totalBalance = draft.accounts.filter((account) => !account.deletedAt).reduce(
     (sum, account) => sum + (account.currentBalance ?? account.openingBalance ?? 0),
     0,
   );
 
   const updateSettings = (patch: Partial<Configuration["settings"]>) =>
     setDraft({ ...draft, settings: { ...draft.settings, ...patch } });
+
+  // 记账模式门控：dual 才显示归属选择器、客户合作方、税务面板。
+  // 防御性地把"存在 company 归属账户"也判为 dual，避免老库漏字段时藏掉经营维度。
+  const isDual = draft.settings.ledgerMode === "dual" || draft.accounts.some((account) => account.ownership === "company");
+  const panelOptions = SETTINGS_PANEL_OPTIONS.filter(
+    (option) => isDual || (option.value !== "counterparties" && option.value !== "tax"),
+  );
+  // 深链或切模式后 activePanel 可能指向已隐藏面板 → 回落到货币面板，杜绝空白。
+  const effectivePanel: SettingsPanel = panelOptions.some((option) => option.value === activePanel)
+    ? activePanel
+    : "currency";
 
   return (
     <div className="space-y-5">
@@ -162,18 +193,15 @@ export function SettingsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span
-              className={clsx(
-                "inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-[13.5px] font-medium select-none whitespace-nowrap",
-                dirty
-                  ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                  : "border-emerald-600/35 bg-emerald-600/10 text-emerald-800 dark:text-emerald-300",
-              )}
-              aria-live="polite"
-            >
-              {dirty ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}
+            <SegmentedSwitch
+              value={isDual ? "dual" : "personal"}
+              options={LEDGER_MODE_OPTIONS}
+              onChange={(mode) => updateSettings({ ledgerMode: mode })}
+              ariaLabel="记账模式"
+            />
+            <StatusPill tone={dirty ? "warning" : "success"}>
               {dirty ? "有未保存改动" : "已保存"}
-            </span>
+            </StatusPill>
             <Button variant="outline" disabled={!dirty || busy || !data} onClick={() => data && setDraft(cloneConfig(data))}>
               恢复默认
             </Button>
@@ -191,16 +219,16 @@ export function SettingsPage() {
         </div>
         <div className="border-t border-border px-5 py-4">
           <CategoryTabs
-            value={activePanel}
+            value={effectivePanel}
             onChange={setActivePanel}
-            options={SETTINGS_PANEL_OPTIONS}
+            options={panelOptions}
             variant="pills"
             ariaLabel="设置分组"
           />
         </div>
       </Card>
 
-      {activePanel === "currency" && (
+      {effectivePanel === "currency" && (
         <Card padding="none">
           <SectionHeader
             title="货币与单位设置"
@@ -224,10 +252,10 @@ export function SettingsPage() {
                 </>
               }
             >
-              <Select
+              <Autocomplete
                 label="默认币种"
                 value={draft.settings.defaultCurrency}
-                onChange={(event) => updateSettings({ defaultCurrency: event.target.value })}
+                onChange={(value) => updateSettings({ defaultCurrency: value })}
                 options={CURRENCY_OPTIONS}
               />
             </ItemCard>
@@ -248,10 +276,10 @@ export function SettingsPage() {
                 </>
               }
             >
-              <Select
+              <Autocomplete
                 label="基本单位"
                 value={draft.settings.baseUnit}
-                onChange={(event) => updateSettings({ baseUnit: event.target.value })}
+                onChange={(value) => updateSettings({ baseUnit: value })}
                 options={UNIT_OPTIONS}
               />
             </ItemCard>
@@ -281,15 +309,16 @@ export function SettingsPage() {
         </Card>
       )}
 
-      {activePanel === "accounts" && (
+      {effectivePanel === "accounts" && (
         <AccountsSection
           accounts={draft.accounts}
           exchangeRates={draft.settings.exchangeRates}
+          showOwnership={isDual}
           onChange={(accounts) => setDraft({ ...draft, accounts })}
         />
       )}
 
-      {activePanel === "projects" && (
+      {effectivePanel === "projects" && (
         <ProjectsSection
           projects={draft.settings.projects}
           accounts={draft.accounts}
@@ -297,7 +326,7 @@ export function SettingsPage() {
         />
       )}
 
-      {activePanel === "sources" && (
+      {effectivePanel === "sources" && (
         <SourcesSection
           sources={draft.settings.financeSources || []}
           accounts={draft.accounts}
@@ -305,7 +334,7 @@ export function SettingsPage() {
         />
       )}
 
-      {activePanel === "categories" && (
+      {effectivePanel === "categories" && (
         <CategoriesSection
           categories={draft.categories}
           accounts={draft.accounts}
@@ -314,7 +343,7 @@ export function SettingsPage() {
         />
       )}
 
-      {activePanel === "counterparties" && (
+      {isDual && effectivePanel === "counterparties" && (
         <CounterpartiesSection
           counterparties={draft.settings.counterparties || []}
           accounts={draft.accounts}
@@ -322,14 +351,14 @@ export function SettingsPage() {
         />
       )}
 
-      {activePanel === "recurring" && (
+      {effectivePanel === "recurring" && (
         <RecurringSection
           accounts={draft.accounts}
           categories={draft.categories}
         />
       )}
 
-      {activePanel === "import" && (
+      {effectivePanel === "import" && (
         <ImportSection
           accounts={draft.accounts}
           categories={draft.categories}
@@ -340,12 +369,14 @@ export function SettingsPage() {
         />
       )}
 
-      {activePanel === "tax" && (
+      {isDual && effectivePanel === "tax" && (
         <TaxConfigSection
           taxConfig={draft.settings.taxConfig || { vatRate: 0.03, personalThreshold: 60000, personalRate: 0.20, sebRate: 0.10, currency: "CNY" }}
           onChange={(taxConfig) => updateSettings({ taxConfig })}
         />
       )}
+
+      {effectivePanel === "dashboard" && <DashboardSection />}
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 rounded-md bg-foreground px-4 py-3 text-[13px] text-background shadow-xl">
@@ -356,13 +387,41 @@ export function SettingsPage() {
   );
 }
 
+function DashboardSection() {
+  const [customizerOpen, setCustomizerOpen] = useState(false);
+  return (
+    <Card padding="none">
+      <SectionHeader
+        title="仪表盘布局"
+        description="控制「财务状况」页各模块的显隐与排序；配置保存在本机浏览器，不写入 Finance Node。"
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            leading={<LayoutDashboard size={13} />}
+            onClick={() => setCustomizerOpen(true)}
+          >
+            自定义仪表盘
+          </Button>
+        }
+      />
+      <div className="px-5 py-4 text-body-sm text-muted-foreground">
+        隐藏的模块不参与渲染；重新开启后立即恢复。财务状况页本身保持纯报表，不放配置入口。
+      </div>
+      <DashboardCustomizer open={customizerOpen} onClose={() => setCustomizerOpen(false)} />
+    </Card>
+  );
+}
+
 function AccountsSection({
   accounts,
   exchangeRates,
+  showOwnership,
   onChange,
 }: {
   accounts: Account[];
   exchangeRates?: ExchangeRates;
+  showOwnership: boolean;
   onChange: (next: Account[]) => void;
 }) {
   const baseCurrency = exchangeRates?.baseCurrency || "CNY";
@@ -387,7 +446,8 @@ function AccountsSection({
         tintHex: "#7f91d6",
         keywords: [],
         uiAccountType: "其他",
-        ownership: "unspecified",
+        // personal 模式不暴露归属，新账户直接落 personal，避免后端 infer 误判
+        ownership: showOwnership ? "unspecified" : "personal",
         classification: "asset",
         creditLimit: 0,
       },
@@ -403,6 +463,7 @@ function AccountsSection({
         {accounts.map((account, index) => (
           <ItemCard
             key={account.id}
+            className={account.deletedAt ? "border-destructive/40 bg-destructive/5 opacity-65" : undefined}
             header={
               <>
                 <ColorSwatchPicker
@@ -411,9 +472,11 @@ function AccountsSection({
                   label="账户主题色"
                 />
                 <div className="flex min-w-0 flex-col gap-1.5">
-                  <Badge tone={account.ownership === "company" ? "brand-blue" : account.ownership === "personal" ? "success" : "neutral"}>
-                    {OWNERSHIP_OPTIONS.find((item) => item.value === account.ownership)?.label || "未指定"}
-                  </Badge>
+                  {showOwnership && (
+                    <Badge tone={account.ownership === "company" ? "brand-blue" : account.ownership === "personal" ? "success" : "neutral"}>
+                      {OWNERSHIP_OPTIONS.find((item) => item.value === account.ownership)?.label || "未指定"}
+                    </Badge>
+                  )}
                   <span className="font-mono text-[11px] uppercase text-muted-foreground">
                     {(account.tintHex || "#7f91d6").toUpperCase()}
                   </span>
@@ -431,14 +494,38 @@ function AccountsSection({
                 <History size={14} />
               </button>
             }
-            onDelete={() => onChange(accounts.filter((_, i) => i !== index))}
+            onDelete={() => onChange(accounts.map((item, i) => i === index ? {
+              ...item,
+              deletedAt: new Date().toISOString(),
+              deletedBy: "dashboard",
+              deletionReason: "用户在设置页删除",
+              deletionImpact: {
+                balance: item.currentBalance ?? item.openingBalance ?? 0,
+                assetDelta: item.classification === "liability" ? 0 : -(item.currentBalance ?? item.openingBalance ?? 0),
+                liabilityDelta: item.classification === "liability" ? -(item.currentBalance ?? item.openingBalance ?? 0) : 0,
+                netWorthDelta: item.classification === "liability" ? (item.currentBalance ?? item.openingBalance ?? 0) : -(item.currentBalance ?? item.openingBalance ?? 0),
+              },
+            } : item))}
             deleteLabel="删除此账户"
           >
+            {account.deletedAt && (
+              <>
+                <span className="pointer-events-none absolute inset-x-3 top-1/2 h-0.5 -rotate-6 bg-destructive/70" />
+                <div className="rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2 text-[12px] text-destructive">
+                <div className="font-semibold line-through decoration-2">已删除账户 · {account.deletedBy || "Agent"}</div>
+                <div className="mt-1 text-muted-foreground">删除时余额 {formatCurrency(account.deletionImpact?.balance ?? account.currentBalance ?? account.openingBalance ?? 0)} · 当前资产 {formatSigned(account.deletionImpact?.assetDelta ?? 0)} · 净资产 {formatSigned(account.deletionImpact?.netWorthDelta ?? 0)}</div>
+                </div>
+              </>
+            )}
             <TextInput label="账户名称" value={account.name} onChange={(event) => update(index, { name: event.target.value })} />
-            <div className="grid grid-cols-2 gap-3">
-              <Select label="归属类型" value={account.ownership || "unspecified"} onChange={(event) => update(index, { ownership: event.target.value as AccountOwnership })} options={OWNERSHIP_OPTIONS} />
-              <Select label="性质" value={account.classification || "asset"} onChange={(event) => update(index, { classification: event.target.value as AccountClassification })} options={CLASSIFICATION_OPTIONS} />
-            </div>
+            {showOwnership ? (
+              <div className="grid grid-cols-2 gap-3">
+                <Autocomplete label="归属类型" value={account.ownership || "unspecified"} onChange={(value) => update(index, { ownership: value as AccountOwnership })} options={OWNERSHIP_OPTIONS} />
+                <Autocomplete label="性质" value={account.classification || "asset"} onChange={(value) => update(index, { classification: value as AccountClassification })} options={CLASSIFICATION_OPTIONS} />
+              </div>
+            ) : (
+              <Autocomplete label="性质" value={account.classification || "asset"} onChange={(value) => update(index, { classification: value as AccountClassification })} options={CLASSIFICATION_OPTIONS} />
+            )}
             {account.classification === "liability" && (
               <TextInput
                 label={account.type === "creditCard" ? "信用额度" : "总借款额"}
@@ -599,10 +686,10 @@ function ProjectsSection({
           >
             <TextInput label="项目名称" value={project.name} onChange={(event) => update(index, { name: event.target.value })} />
             <TextInput label="说明" value={project.note || ""} onChange={(event) => update(index, { note: event.target.value })} />
-            <Select
+            <Autocomplete
               label="资金追踪"
               value={project.trackingEnabled ? "yes" : "no"}
-              onChange={(event) => update(index, { trackingEnabled: event.target.value === "yes" })}
+              onChange={(value) => update(index, { trackingEnabled: value === "yes" })}
               options={[{ value: "yes", label: "开启" }, { value: "no", label: "关闭" }]}
             />
             <details className="rounded-md border border-border/60 bg-background/30 px-3 py-2" open={(project.expectedCost || 0) > 0 || (project.expectedRevenue || 0) > 0}>
@@ -625,17 +712,17 @@ function ProjectsSection({
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <TextInput
+                  <DatePicker
                     label="起始日期"
-                    type="date"
                     value={project.startDate || ""}
-                    onChange={(event) => update(index, { startDate: event.target.value || null })}
+                    max={project.endDate || undefined}
+                    onChange={(value) => update(index, { startDate: value || null })}
                   />
-                  <TextInput
+                  <DatePicker
                     label="结束日期"
-                    type="date"
                     value={project.endDate || ""}
-                    onChange={(event) => update(index, { endDate: event.target.value || null })}
+                    min={project.startDate || undefined}
+                    onChange={(value) => update(index, { endDate: value || null })}
                   />
                 </div>
               </div>
@@ -651,17 +738,18 @@ function ProjectsSection({
                   value={String(project.goal?.targetAmount || 0)}
                   onChange={(event) => updateGoal(index, { targetAmount: Number(event.target.value) || 0 })}
                 />
-                <TextInput
+                <DatePicker
                   label="目标日期"
-                  type="date"
                   value={project.goal?.targetDate || ""}
-                  onChange={(event) => updateGoal(index, { targetDate: event.target.value || null })}
+                  onChange={(value) => updateGoal(index, { targetDate: value || null })}
                 />
-                <Select
+                <Autocomplete
                   label="资金来自账户"
                   value={project.goal?.sourceAccountId || ""}
-                  onChange={(event) => updateGoal(index, { sourceAccountId: event.target.value })}
+                  onChange={(value) => updateGoal(index, { sourceAccountId: value })}
                   options={accountOptions}
+                  placeholder="选择账户…"
+                  searchPlaceholder="搜索账户…"
                 />
                 <TextInput
                   label="描述"
@@ -752,7 +840,7 @@ function SourcesSection({
             deleteLabel="删除此资金来源"
           >
             <TextInput label="来源名称" value={source.name} onChange={(event) => update(index, { name: event.target.value })} />
-            <Select label="默认入账账户" value={source.defaultAccountId || ""} onChange={(event) => update(index, { defaultAccountId: event.target.value })} options={accountOptions} />
+            <Autocomplete label="默认入账账户" value={source.defaultAccountId || ""} onChange={(value) => update(index, { defaultAccountId: value })} options={accountOptions} placeholder="选择账户…" searchPlaceholder="搜索账户…" />
             <TextInput label="备注" value={source.note || ""} onChange={(event) => update(index, { note: event.target.value })} />
           </ItemCard>
         ))}
@@ -760,6 +848,9 @@ function SourcesSection({
     </Card>
   );
 }
+
+// 转账是服务于 kind=transfer 的系统类别，不作为用户可编辑的收支分类展示（数据仍保留）。
+const SYSTEM_CATEGORY_IDS = new Set(["category-transfer"]);
 
 function CategoriesSection({
   categories,
@@ -774,68 +865,162 @@ function CategoriesSection({
 }) {
   const accountOptions = [{ value: "", label: "不指定" }, ...accounts.map((account) => ({ value: account.id, label: account.name }))];
   const projectOptions = [{ value: "", label: "未绑定项目" }, ...projects.map((project) => ({ value: project.id, label: project.name }))];
+  const accountNameById = useMemo(
+    () => new Map(accounts.map((account) => [account.id, account.name] as const)),
+    [accounts],
+  );
+  const [directionTab, setDirectionTab] = useState<"支出" | "收入">("支出");
+  const [editIndex, setEditIndex] = useState<number | null>(null);
+
   const update = (index: number, patch: Partial<CategoryRef>) => {
     const next = [...categories];
     next[index] = { ...next[index], ...patch };
     onChange(next);
   };
-  const add = () =>
-    onChange([...categories, { id: `category-${Date.now()}`, name: "新类别", direction: "支出", group: "", keywords: [], tintHex: "#d97757" }]);
+  const remove = (index: number) => {
+    setEditIndex(null);
+    onChange(categories.filter((_, i) => i !== index));
+  };
+  const add = () => {
+    const newIndex = categories.length;
+    onChange([
+      ...categories,
+      { id: `category-${Date.now()}`, name: directionTab === "收入" ? "新收入类别" : "新支出类别", direction: directionTab, group: "", keywords: [], tintHex: "#d97757" },
+    ]);
+    setEditIndex(newIndex);
+  };
+
+  // 保留真实索引，供 update / remove 定位；同时按方向 tab + 排除系统类别做展示过滤
+  const rows = categories
+    .map((category, index) => ({ category, index }))
+    .filter(({ category }) => !SYSTEM_CATEGORY_IDS.has(category.id || "") && (category.direction || "支出") === directionTab);
+  const expenseCount = categories.filter((c) => !SYSTEM_CATEGORY_IDS.has(c.id || "") && (c.direction || "支出") === "支出").length;
+  const incomeCount = categories.filter((c) => !SYSTEM_CATEGORY_IDS.has(c.id || "") && c.direction === "收入").length;
+
+  const editing = editIndex != null ? categories[editIndex] : null;
+
   return (
     <Card padding="none">
       <SectionHeader
         title="类别管理"
-        description="类别是桑基图末层，用来管理支出项目的分类。"
-        action={<Button variant="outline" size="sm" leading={<Plus size={13} />} onClick={add}>新增类别</Button>}
+        description="收入与支出分开管理。点开任意类别可编辑默认账户、月度预算与识别关键词。"
+        action={
+          <Button variant="outline" size="sm" leading={<Plus size={13} />} onClick={add}>
+            新增{directionTab}类别
+          </Button>
+        }
       />
-      <SectionGrid>
-        {categories.map((category, index) => (
-          <ItemCard
-            key={category.id || index}
-            header={
-              <>
-                <ColorSwatchPicker
-                  value={category.tintHex || "#d97757"}
-                  onChange={(hex) => update(index, { tintHex: hex })}
-                  icon={<Tags size={20} />}
-                  label="类别主题色"
-                />
-                <div className="flex min-w-0 flex-col gap-1.5">
-                  <Badge tone={category.direction === "收入" ? "success" : "warning"}>
-                    {category.direction || "支出"}
-                  </Badge>
-                  <span className="font-mono text-[11px] uppercase text-muted-foreground">
-                    {(category.tintHex || "#d97757").toUpperCase()}
+      <div className="border-b border-border px-5 py-3">
+        <CategoryTabs
+          value={directionTab}
+          onChange={setDirectionTab}
+          options={[
+            { value: "支出", label: `支出 (${expenseCount})` },
+            { value: "收入", label: `收入 (${incomeCount})` },
+          ]}
+          variant="pills"
+          ariaLabel="类别方向"
+        />
+      </div>
+      <div className="space-y-1.5 p-4">
+        {rows.length === 0 && (
+          <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted-foreground">
+            还没有{directionTab}类别，点右上角「新增{directionTab}类别」创建。
+          </div>
+        )}
+        {rows.map(({ category, index }) => {
+          const accountName = category.defaultAccountId ? accountNameById.get(category.defaultAccountId) : undefined;
+          const budget = category.monthlyBudget || 0;
+          return (
+            <div key={category.id || index} className="flex items-center gap-1.5 rounded-lg border border-border bg-card">
+              <button
+                type="button"
+                onClick={() => setEditIndex(index)}
+                className="flex flex-1 items-center gap-3 rounded-l-lg px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+              >
+                <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ backgroundColor: category.tintHex || "#d97757" }} />
+                <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{category.name}</span>
+                {accountName && (
+                  <span className="hidden shrink-0 items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground sm:inline-flex">
+                    → {accountName}
                   </span>
-                </div>
-              </>
-            }
-            onDelete={() => onChange(categories.filter((_, i) => i !== index))}
-            deleteLabel="删除此类别"
-          >
-            <TextInput label="类别名称" value={category.name} onChange={(event) => update(index, { name: event.target.value })} />
-            <div className="grid grid-cols-2 gap-3">
-              <Select label="方向" value={category.direction || "支出"} onChange={(event) => update(index, { direction: event.target.value as "收入" | "支出" })} options={[{ value: "收入", label: "收入" }, { value: "支出", label: "支出" }]} />
-              <Select label="默认账户" value={category.defaultAccountId || ""} onChange={(event) => update(index, { defaultAccountId: event.target.value })} options={accountOptions} />
+                )}
+                {budget > 0 && (
+                  <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                    预算 {formatCurrency(budget)}
+                  </span>
+                )}
+                <Pencil size={13} className="shrink-0 text-muted-foreground" />
+              </button>
+              <button
+                type="button"
+                onClick={() => remove(index)}
+                aria-label={`删除类别 ${category.name}`}
+                title="删除此类别"
+                className="mr-1.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
-            <Select label="项目归属" value={category.projectId || ""} onChange={(event) => update(index, { projectId: event.target.value })} options={projectOptions} />
-            {(category.direction || "支出") === "支出" && (
+          );
+        })}
+      </div>
+
+      <Modal
+        open={editing != null}
+        onClose={() => setEditIndex(null)}
+        size="sm"
+        title={
+          <span className="flex items-center gap-2">
+            <Tags size={16} /> 编辑类别
+          </span>
+        }
+        footer={
+          <div className="flex justify-end">
+            <Button onClick={() => setEditIndex(null)}>完成</Button>
+          </div>
+        }
+      >
+        {editing && editIndex != null && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <ColorSwatchPicker
+                value={editing.tintHex || "#d97757"}
+                onChange={(hex) => update(editIndex, { tintHex: hex })}
+                icon={<Tags size={20} />}
+                label="类别主题色"
+              />
+              <div className="flex-1">
+                <TextInput label="类别名称" value={editing.name} onChange={(event) => update(editIndex, { name: event.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Autocomplete label="方向" value={editing.direction || "支出"} onChange={(value) => update(editIndex, { direction: value as "收入" | "支出" })} options={[{ value: "支出", label: "支出" }, { value: "收入", label: "收入" }]} />
+              <Autocomplete label="默认账户" value={editing.defaultAccountId || ""} onChange={(value) => update(editIndex, { defaultAccountId: value })} options={accountOptions} placeholder="选择账户…" searchPlaceholder="搜索账户…" />
+            </div>
+            {(editing.direction || "支出") === "支出" && (
               <TextInput
                 label="月度预算（0 表示不设预算）"
                 type="number"
-                value={String(category.monthlyBudget || 0)}
-                onChange={(event) => update(index, { monthlyBudget: Number(event.target.value) || 0 })}
+                value={String(editing.monthlyBudget || 0)}
+                onChange={(event) => update(editIndex, { monthlyBudget: Number(event.target.value) || 0 })}
                 placeholder="留空 / 0 不参与预算追踪"
               />
             )}
             <TextInput
-              label="关键词"
-              value={(category.keywords || []).join(", ")}
-              onChange={(event) => update(index, { keywords: event.target.value.split(/[,，、]/).map((item) => item.trim()).filter(Boolean) })}
+              label="关键词（帮助 AI 与账单导入自动归类）"
+              value={(editing.keywords || []).join(", ")}
+              onChange={(event) => update(editIndex, { keywords: event.target.value.split(/[,，、]/).map((item) => item.trim()).filter(Boolean) })}
             />
-          </ItemCard>
-        ))}
-      </SectionGrid>
+            <details className="rounded-md border border-border px-3 py-2 text-[13px]">
+              <summary className="cursor-pointer select-none text-muted-foreground">高级 · 项目归属</summary>
+              <div className="pt-3">
+                <Autocomplete label="项目归属" value={editing.projectId || ""} onChange={(value) => update(editIndex, { projectId: value })} options={projectOptions} placeholder="选择项目…" searchPlaceholder="搜索项目…" />
+              </div>
+            </details>
+          </div>
+        )}
+      </Modal>
     </Card>
   );
 }
@@ -918,17 +1103,19 @@ function CounterpartiesSection({
             deleteLabel="删除此对手方"
           >
             <TextInput label="名称" value={cp.name} onChange={(event) => update(index, { name: event.target.value })} />
-            <Select
+            <Autocomplete
               label="类型"
               value={cp.kind}
-              onChange={(event) => update(index, { kind: event.target.value as CounterpartyKind })}
+              onChange={(value) => update(index, { kind: value as CounterpartyKind })}
               options={COUNTERPARTY_KIND_OPTIONS}
             />
-            <Select
+            <Autocomplete
               label="默认结算账户"
               value={cp.defaultAccountId || ""}
-              onChange={(event) => update(index, { defaultAccountId: event.target.value })}
+              onChange={(value) => update(index, { defaultAccountId: value })}
               options={accountOptions}
+              placeholder="选择账户…"
+              searchPlaceholder="搜索账户…"
             />
             <TextInput
               label="联系方式"
@@ -966,6 +1153,10 @@ function CounterpartiesSection({
       </SectionGrid>
     </Card>
   );
+}
+
+function formatSigned(value: number) {
+  return `${value >= 0 ? "+" : "−"}${formatCurrency(Math.abs(value))}`;
 }
 
 function TopStat({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
@@ -1009,16 +1200,18 @@ function ItemCard({
   onDelete,
   deleteLabel,
   actions,
+  className,
   children,
 }: {
   header: ReactNode;
   onDelete?: () => void;
   deleteLabel?: string;
   actions?: ReactNode;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="group/itemcard rounded-lg border border-border bg-background/40 p-4 transition-colors hover:border-border/80">
+    <div className={`group/itemcard relative rounded-lg border border-border bg-background/40 p-4 transition-colors hover:border-border/80 ${className || ""}`}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">{header}</div>
         <div className="flex shrink-0 items-center gap-1">
@@ -1354,10 +1547,10 @@ function TaxConfigSection({
               value={String(year)}
               onChange={(event) => setYear(Number(event.target.value) || new Date().getFullYear())}
             />
-            <Select
+            <Autocomplete
               label="季度（可选）"
               value={String(quarter)}
-              onChange={(event) => setQuarter(event.target.value ? Number(event.target.value) : "")}
+              onChange={(value) => setQuarter(value ? Number(value) : "")}
               options={[
                 { value: "", label: "全年" },
                 { value: "1", label: "Q1" },
@@ -1379,7 +1572,7 @@ function TaxConfigSection({
   );
 }
 
-type ImportTemplate = "wechat" | "alipay" | "cmb" | "generic";
+type ImportTemplate = "wechat" | "alipay" | "generic";
 type ImportStep = "upload" | "preview" | "done";
 
 const IMPORT_TEMPLATES: Array<{ value: ImportTemplate; label: string; description: string; help?: string }> = [
@@ -1396,15 +1589,9 @@ const IMPORT_TEMPLATES: Array<{ value: ImportTemplate; label: string; descriptio
     help: "导出路径：支付宝 → 我的 → 账单 → 右上角 → 开具交易流水证明 → 邮件接收。",
   },
   {
-    value: "cmb",
-    label: "招商银行流水",
-    description: "招行明细 CSV / TSV。",
-    help: "导出路径：招行 App → 我的 → 全部 → 交易流水 → 导出本月。",
-  },
-  {
     value: "generic",
     label: "通用 CSV",
-    description: "任意 CSV，按列名智能匹配。",
+    description: "任意银行 / 平台 CSV，按列名智能匹配。",
     help: "至少需要含「日期」「金额」「交易对方」三列，列名见鼠标 hover 各模板提示。",
   },
 ];
@@ -1486,7 +1673,7 @@ function ImportSection({
     <Card padding="none">
       <SectionHeader
         title="账单导入"
-        description="从微信 / 支付宝 / 招行 / 任意 CSV 导入账单。系统会按列名识别 + 用 keywords 自动匹配分类与账户。"
+        description="从微信 / 支付宝 / 任意银行 CSV 导入账单。系统会按列名识别 + 用 keywords 自动匹配分类与账户。"
         action={
           step !== "upload" ? (
             <Button variant="outline" size="sm" onClick={reset}>重新开始</Button>
@@ -1618,10 +1805,12 @@ function ImportSection({
                       <td className="px-3 py-2 text-right font-serif tabular-nums">¥{(tx.amount || 0).toFixed(2)}</td>
                       <td className="truncate px-3 py-2">{tx.title || "未命名"}</td>
                       <td className="px-3 py-2">
-                        <select
+                        <Autocomplete
+                          size="sm"
+                          ariaLabel="分类"
                           value={cat?.id || cat?.name || ""}
-                          onChange={(event) => {
-                            const target = categories.find((c) => (c.id || c.name) === event.target.value);
+                          onChange={(value) => {
+                            const target = categories.find((c) => (c.id || c.name) === value);
                             const next = [...preview];
                             next[index] = {
                               ...next[index],
@@ -1631,27 +1820,21 @@ function ImportSection({
                             };
                             setPreview(next);
                           }}
-                          className="h-8 w-full rounded-md border border-border bg-background px-2 text-[12.5px]"
-                        >
-                          {categoryOptions.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
+                          options={categoryOptions}
+                        />
                       </td>
                       <td className="px-3 py-2">
-                        <select
+                        <Autocomplete
+                          size="sm"
+                          ariaLabel="账户"
                           value={tx.accountName || ""}
-                          onChange={(event) => {
+                          onChange={(value) => {
                             const next = [...preview];
-                            next[index] = { ...next[index], accountName: event.target.value };
+                            next[index] = { ...next[index], accountName: value };
                             setPreview(next);
                           }}
-                          className="h-8 w-full rounded-md border border-border bg-background px-2 text-[12.5px]"
-                        >
-                          {accountOptions.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
+                          options={accountOptions}
+                        />
                       </td>
                     </tr>
                   );
@@ -1691,6 +1874,7 @@ function ImportSection({
 function RecurringSection({ accounts, categories }: { accounts: Account[]; categories: CategoryRef[] }) {
   const { data, loading, refresh } = useApi(() => api.listRecurring(), []);
   const [busy, setBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<RecurringRule | null>(null);
   const rules = data || [];
   const accountOptions = [{ value: "", label: "—" }, ...accounts.map((a) => ({ value: a.name, label: a.name }))];
   const categoryOptions = [
@@ -1748,11 +1932,14 @@ function RecurringSection({ accounts, categories }: { accounts: Account[]; categ
     }
   };
 
-  const remove = async (rule: RecurringRule) => {
-    if (!window.confirm(`确认删除「${rule.name}」？此操作不可恢复。`)) return;
+  const remove = (rule: RecurringRule) => setDeleteTarget(rule);
+
+  const performRemove = async () => {
+    if (!deleteTarget) return;
     setBusy(true);
     try {
-      await api.deleteRecurring(rule.id);
+      await api.deleteRecurring(deleteTarget.id);
+      setDeleteTarget(null);
       refresh();
     } finally {
       setBusy(false);
@@ -1812,10 +1999,10 @@ function RecurringSection({ accounts, categories }: { accounts: Account[]; categ
                   onChange={(event) => updateRule(rule, { name: event.target.value })}
                 />
                 <div className="grid grid-cols-2 gap-3">
-                  <Select
+                  <Autocomplete
                     label="类型"
                     value={kind}
-                    onChange={(event) => updateTemplate(rule, { kind: event.target.value as TransactionKind })}
+                    onChange={(value) => updateTemplate(rule, { kind: value as TransactionKind })}
                     options={TRANSACTION_KIND_OPTIONS}
                   />
                   <TextInput
@@ -1831,17 +2018,19 @@ function RecurringSection({ accounts, categories }: { accounts: Account[]; categ
                   onChange={(event) => updateTemplate(rule, { title: event.target.value })}
                 />
                 <div className="grid grid-cols-2 gap-3">
-                  <Select
+                  <Autocomplete
                     label="账户"
                     value={String(tpl.accountName || "")}
-                    onChange={(event) => updateTemplate(rule, { accountName: event.target.value })}
+                    onChange={(value) => updateTemplate(rule, { accountName: value })}
                     options={accountOptions}
+                    placeholder="选择账户…"
+                    searchPlaceholder="搜索账户…"
                   />
-                  <Select
+                  <Autocomplete
                     label="分类"
                     value={tplCategory?.id || tplCategory?.name || ""}
-                    onChange={(event) => {
-                      const cat = categories.find((c) => (c.id || c.name) === event.target.value);
+                    onChange={(value) => {
+                      const cat = categories.find((c) => (c.id || c.name) === value);
                       updateTemplate(rule, {
                         category: cat
                           ? { id: cat.id, name: cat.name, tintHex: cat.tintHex }
@@ -1849,13 +2038,15 @@ function RecurringSection({ accounts, categories }: { accounts: Account[]; categ
                       });
                     }}
                     options={categoryOptions}
+                    placeholder="选择分类…"
+                    searchPlaceholder="搜索分类…"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <Select
+                  <Autocomplete
                     label="频率"
                     value={rule.frequency}
-                    onChange={(event) => updateRule(rule, { frequency: event.target.value as RecurringFrequency })}
+                    onChange={(value) => updateRule(rule, { frequency: value as RecurringFrequency })}
                     options={FREQUENCY_OPTIONS}
                   />
                   <TextInput
@@ -1886,10 +2077,10 @@ function RecurringSection({ accounts, categories }: { accounts: Account[]; categ
                     value={rule.endDate || ""}
                     onChange={(event) => updateRule(rule, { endDate: event.target.value || null })}
                   />
-                  <Select
+                  <Autocomplete
                     label="是否启用"
                     value={rule.enabled ? "yes" : "no"}
-                    onChange={(event) => updateRule(rule, { enabled: event.target.value === "yes" })}
+                    onChange={(value) => updateRule(rule, { enabled: value === "yes" })}
                     options={[
                       { value: "yes", label: "启用" },
                       { value: "no", label: "暂停" },
@@ -1906,6 +2097,17 @@ function RecurringSection({ accounts, categories }: { accounts: Account[]; categ
           })}
         </SectionGrid>
       )}
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        tone="destructive"
+        title="删除周期账目"
+        description={deleteTarget ? `确认删除「${deleteTarget.name}」？此操作不可恢复。` : undefined}
+        confirmLabel="删除"
+        busy={busy}
+        onConfirm={performRemove}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </Card>
   );
 }

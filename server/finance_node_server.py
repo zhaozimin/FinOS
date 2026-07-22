@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+[INPUT]: 依赖 runtime SQLite、静态 PWA 产物和 agent_audit 的审计/检查点能力。
+[OUTPUT]: 对外提供 Finance Node HTTP API、主数据 Agent 操作与可见删除状态。
+[POS]: service 的应用入口；协调账本持久化、鉴权、Agent 工具和前端数据契约。
+[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+"""
 from collections import defaultdict
 from contextlib import closing
 import base64
@@ -8,12 +14,15 @@ import mimetypes
 import os
 import sqlite3
 import sys
+import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional, Union
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
+
+from agent_audit import append_audit_event, checkpoint_database, ensure_audit_schema
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
@@ -24,6 +33,7 @@ DB_PATH = RUNTIME_DIR / "finance.sqlite3"
 ATTACHMENTS_DIR = RUNTIME_DIR / "attachments"
 ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024  # 10 MB hard cap per file
 WEB_DIR = ROOT / "web"
+MUTATION_LOCK = threading.RLock()
 
 
 def utc_now_iso() -> str:
@@ -53,12 +63,15 @@ def connect_db() -> sqlite3.Connection:
 
 
 def default_categories() -> list:
+    # 新手默认：7 支出 + 3 收入 + 1 系统（转账，前端从可编辑列表隐藏）。
+    # 每个类别都显式带 direction；收入类预挂 defaultAccountId，一装即可用。
     return [
         {
             "id": "category-food",
             "name": "餐饮",
             "systemImage": "fork.knife",
             "tintHex": "#FF8C42",
+            "direction": "支出",
             "keywords": ["饭", "午饭", "晚饭", "咖啡", "奶茶", "早餐", "餐", "火锅"],
         },
         {
@@ -66,6 +79,7 @@ def default_categories() -> list:
             "name": "交通",
             "systemImage": "tram.fill",
             "tintHex": "#4F7CFF",
+            "direction": "支出",
             "keywords": ["打车", "地铁", "高铁", "机票", "机场", "滴滴", "车费"],
         },
         {
@@ -73,6 +87,7 @@ def default_categories() -> list:
             "name": "住房",
             "systemImage": "house.fill",
             "tintHex": "#6F5BD3",
+            "direction": "支出",
             "keywords": ["房租", "物业", "水电", "酒店", "住宿"],
         },
         {
@@ -80,20 +95,15 @@ def default_categories() -> list:
             "name": "购物",
             "systemImage": "bag.fill",
             "tintHex": "#E64980",
+            "direction": "支出",
             "keywords": ["购物", "淘宝", "衣服", "鞋", "日用", "京东"],
-        },
-        {
-            "id": "category-office",
-            "name": "办公",
-            "systemImage": "briefcase.fill",
-            "tintHex": "#009688",
-            "keywords": ["办公", "文具", "打印", "耗材", "客户", "招待"],
         },
         {
             "id": "category-entertainment",
             "name": "娱乐",
             "systemImage": "gamecontroller.fill",
             "tintHex": "#F06543",
+            "direction": "支出",
             "keywords": ["电影", "游戏", "聚餐", "娱乐", "门票"],
         },
         {
@@ -101,20 +111,49 @@ def default_categories() -> list:
             "name": "医疗",
             "systemImage": "cross.case.fill",
             "tintHex": "#FF5D73",
+            "direction": "支出",
             "keywords": ["医院", "药", "体检", "挂号"],
         },
         {
-            "id": "category-income",
-            "name": "收入",
+            "id": "category-social",
+            "name": "人情往来",
+            "systemImage": "gift.fill",
+            "tintHex": "#E8590C",
+            "direction": "支出",
+            "keywords": ["红包", "礼金", "份子", "请客", "送礼", "人情"],
+        },
+        {
+            "id": "category-salary",
+            "name": "工资",
             "systemImage": "banknote.fill",
             "tintHex": "#2F9E44",
-            "keywords": ["工资", "收入", "奖金", "报销到账", "收款"],
+            "direction": "收入",
+            "defaultAccountId": "account-salary",
+            "keywords": ["工资", "薪水", "月薪", "发工资", "奖金", "年终奖"],
+        },
+        {
+            "id": "category-redpacket",
+            "name": "红包",
+            "systemImage": "gift.fill",
+            "tintHex": "#37B24D",
+            "direction": "收入",
+            "defaultAccountId": "account-wechat",
+            "keywords": ["红包", "收红包", "转账收款", "收款"],
+        },
+        {
+            "id": "category-other-income",
+            "name": "其他收入",
+            "systemImage": "plus.circle.fill",
+            "tintHex": "#1C7ED6",
+            "direction": "收入",
+            "keywords": ["收入", "报销到账", "退款", "利息", "返现"],
         },
         {
             "id": "category-transfer",
             "name": "转账",
             "systemImage": "arrow.left.arrow.right.square.fill",
             "tintHex": "#546E7A",
+            "direction": "支出",
             "keywords": ["转账", "转入", "转出"],
         },
     ]
@@ -149,29 +188,17 @@ def default_accounts() -> list:
             "ownership": "personal",
         },
         {
-            "id": "account-cmb",
-            "name": "招商银行卡",
+            # 用角色名而非品牌名：新手进来就知道往哪填，装完自行改成自己的银行。
+            "id": "account-salary",
+            "name": "工资卡",
             "type": "debitCard",
             "currency": "CNY",
             "openingBalance": 0.0,
             "threshold": 0.0,
-            "brand": "cmb",
-            "tintHex": "#D81E06",
+            "brand": "custom",
+            "tintHex": "#5C6BC0",
             "symbolName": "building.columns.fill",
-            "keywords": ["招行", "招商", "银行卡"],
-            "ownership": "personal",
-        },
-        {
-            "id": "account-credit-card",
-            "name": "信用卡",
-            "type": "creditCard",
-            "currency": "CNY",
-            "openingBalance": 0.0,
-            "threshold": 0.0,
-            "brand": "unionpay",
-            "tintHex": "#3F51B5",
-            "symbolName": "creditcard.fill",
-            "keywords": ["信用卡"],
+            "keywords": ["工资", "工资卡", "银行卡", "储蓄卡", "借记卡"],
             "ownership": "personal",
         },
     ]
@@ -367,6 +394,9 @@ def normalize_tax_config(value: object) -> dict:
 def default_ledger_settings() -> dict:
     return {
         "bookMode": "personalAssistant",
+        # 记账模式：新装默认 personal（个人），隐藏归属/经营/税务等创业者维度；
+        # dual = 个人 + 经营（今日全量形态）。老库由 infer_ledger_mode 迁移推断。
+        "ledgerMode": "personal",
         "defaultCurrency": "CNY",
         "baseUnit": "yuan",
         "timezone": "Asia/Shanghai",
@@ -380,42 +410,165 @@ def default_ledger_settings() -> dict:
     }
 
 
+VALID_LEDGER_MODES = {"personal", "dual"}
+
+
+def normalize_ledger_mode(value: object, fallback: str = "personal") -> str:
+    """记账模式归一化：personal（个人）| dual（个人 + 经营）。"""
+    if isinstance(value, str) and value.strip().lower() in VALID_LEDGER_MODES:
+        return value.strip().lower()
+    return fallback if fallback in VALID_LEDGER_MODES else "personal"
+
+
+def infer_ledger_mode(connection: sqlite3.Connection) -> str:
+    """老库迁移：payload 无 ledgerMode 字段时，存在 company 归属账户即判为 dual。"""
+    try:
+        for row in connection.execute("SELECT payload_json FROM accounts").fetchall():
+            try:
+                payload = json.loads(row["payload_json"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(payload, dict) and payload.get("ownership") == "company":
+                return "dual"
+    except sqlite3.Error:
+        return "personal"
+    return "personal"
+
+
+def scrub_account_ref(account_id: object, valid_account_ids: set) -> str:
+    """引用完整性：defaultAccountId 指向不存在的账户时清空，杜绝悬空引用。"""
+    aid = str(account_id or "")
+    return aid if aid in valid_account_ids else ""
+
+
+# ============================================================
+# AI 主数据防护闸（2026-07）
+# 原则：AI 只可建议，用户确认才落库。
+#  - openClaw 通道的交易引用未知账户/类别/来源/项目 → 422 + 全部合法选项，
+#    逼 Agent 回到对话里让用户从「新建 / 改用现有 / 放弃」中拍板；
+#  - /v1/agent/operations 的主数据增删改必须携带 userConfirmation（用户确认原话），
+#    并随审计事件落库存证。人类 UI 通道（dashboard/manual/import）不受影响。
+# ============================================================
+
+AGENT_TRANSACTION_SOURCES = {"openclaw"}
+
+# 内部流程写入、不属于用户类别配置的系统类别（如余额调整审计交易）
+INTERNAL_CATEGORY_NAMES = {"余额调整"}
+
+
+def collect_master_registry(connection: sqlite3.Connection) -> dict:
+    """汇总当前有效（未删除）主数据名录，供引用校验与 422 提示复用。"""
+    accounts = [str(a.get("name")) for a in list_accounts(connection) if a.get("name") and not a.get("deletedAt")]
+    categories = [str(c.get("name")) for c in list_categories(connection) if c.get("name") and not c.get("deletedAt")]
+    settings = load_ledger_settings(connection)
+    sources = [str(s.get("name")) for s in settings.get("financeSources", []) if s.get("name") and not s.get("deletedAt")]
+    projects = [str(p.get("name")) for p in settings.get("projects", []) if p.get("name")]
+    return {"accounts": accounts, "categories": categories, "sources": sources, "projects": projects}
+
+
+def _category_name_from_row(row: object) -> str:
+    try:
+        return str(json.loads(row["category_json"] or "{}").get("name") or "").strip()
+    except (json.JSONDecodeError, TypeError, KeyError, IndexError):
+        return ""
+
+
+def validate_agent_transaction_refs(
+    connection: sqlite3.Connection, row: dict, existing_row: Optional[sqlite3.Row] = None
+) -> Optional[dict]:
+    """openClaw 交易的引用校验；PUT 更新只查相对原记录变化的字段，不误伤存量编辑。
+    返回 None = 通过；返回 dict = 应以 422 返回的结构化错误。"""
+    if str(row.get("source") or "").strip().lower() not in AGENT_TRANSACTION_SOURCES:
+        return None
+
+    registry = collect_master_registry(connection)
+    issues: list[dict] = []
+
+    def changed(key: str) -> bool:
+        if existing_row is None:
+            return True
+        try:
+            return str(row.get(key) or "") != str(existing_row[key] or "")
+        except (KeyError, IndexError):
+            return True
+
+    def check(kind: str, field: str, value: object, valid: set) -> None:
+        text = str(value or "").strip()
+        if text and text not in valid:
+            issues.append({"field": field, "value": text, "kind": kind})
+
+    account_set = set(registry["accounts"])
+    if changed("account_name"):
+        check("account", "accountName", row.get("account_name"), account_set)
+    if changed("from_account_name"):
+        check("account", "fromAccountName", row.get("from_account_name"), account_set)
+    if changed("to_account_name"):
+        check("account", "toAccountName", row.get("to_account_name"), account_set)
+
+    category_name = _category_name_from_row(row)
+    previous_category = _category_name_from_row(existing_row) if existing_row is not None else None
+    if (
+        category_name
+        and category_name != previous_category
+        and category_name not in INTERNAL_CATEGORY_NAMES
+        and category_name not in set(registry["categories"])
+    ):
+        issues.append({"field": "category", "value": category_name, "kind": "category"})
+
+    if changed("source_name"):
+        check("financeSource", "sourceName", row.get("source_name"), set(registry["sources"]))
+    if changed("project_name"):
+        check("project", "projectName", row.get("project_name"), set(registry["projects"]))
+
+    if not issues:
+        return None
+
+    kind_label = {"account": "账户", "category": "类别", "financeSource": "资金来源", "project": "项目"}
+    detail = "、".join(f"{kind_label[item['kind']]}「{item['value']}」" for item in issues)
+    return {
+        "error": f"{detail} 不存在。AI 不得静默创建或修改主数据——请先向用户确认。",
+        "code": "unknown_master_data",
+        "issues": issues,
+        "valid": registry,
+        "agentInstruction": (
+            "向用户逐项列出选择并等待明确答复，禁止代替用户决定："
+            "1) 新建该主数据（用户同意后调用主数据工具，userConfirmation 填用户确认原话）；"
+            "2) 改用 valid 列表中的现有项（把候选报给用户挑）；"
+            "3) 放弃本笔记录。确认后重发本请求。"
+        ),
+    }
+
+
 def default_finance_sources() -> list:
+    # 新手默认：两个最常见的收入来源，各自预挂到真实存在的账户，杜绝满屏"不指定"。
     return [
         {
-            "id": "source-red-packet",
-            "name": "红包收入",
-            "defaultAccountId": "",
-            "note": "生活侧常见收入来源。",
-            "tintHex": "#87B99B",
+            "id": "source-salary",
+            "name": "工资",
+            "defaultAccountId": "account-salary",
+            "note": "月薪 / 劳务，默认入工资卡。",
+            "tintHex": "#5C6BC0",
         },
         {
-            "id": "source-self-media",
-            "name": "自媒体",
-            "defaultAccountId": "",
-            "note": "经营侧内容平台回款。",
-            "tintHex": "#7F91D6",
+            "id": "source-redpacket",
+            "name": "红包",
+            "defaultAccountId": "account-wechat",
+            "note": "微信红包 / 转账收款。",
+            "tintHex": "#37B24D",
         },
         {
-            "id": "source-consulting",
-            "name": "其他咨询",
-            "defaultAccountId": "",
-            "note": "咨询与服务收入。",
-            "tintHex": "#C69A7D",
+            "id": "source-reimbursement",
+            "name": "报销回款",
+            "defaultAccountId": "account-salary",
+            "note": "报销打回来的钱，默认入工资卡；到账后把原支出的报销状态改为已报销。",
+            "tintHex": "#E8A33D",
         },
     ]
 
 
 def default_projects() -> list:
+    # 新手默认：只留个人侧两档（必要/额外）。经营项目属 dual 模式，由用户自行添加。
     return [
-        {
-            "id": "project-company-ops",
-            "name": "公司运营",
-            "direction": "支出",
-            "group": "公司运营",
-            "note": "用于经营账户的日常运营成本。",
-            "trackingEnabled": True,
-        },
         {
             "id": "project-life-necessary",
             "name": "必要开销",
@@ -529,6 +682,9 @@ def normalize_finance_sources(items: object) -> list[dict]:
                 "defaultAccountId": str(item.get("defaultAccountId") or ""),
                 "note": str(item.get("note") or ""),
                 "tintHex": str(item.get("tintHex") or "#87B99B"),
+                "deletedAt": item.get("deletedAt") or None,
+                "deletedBy": item.get("deletedBy") or None,
+                "deletionReason": item.get("deletionReason") or None,
             }
         )
 
@@ -657,7 +813,7 @@ _RECURRING_CATCHUP_DEBOUNCE_SEC = 30
 # ============== 1.4 账单导入：解析器模块 ==============
 # 设计：
 #   - parse_import_content(template, raw_bytes) -> {transactions: [...], warnings: [...]}
-#   - 各 template（wechat / alipay / cmb / generic）共享 CSV 通用 parser，
+#   - 各 template（wechat / alipay / generic）共享 CSV 通用 parser，
 #     模板差异主要在「跳过前 N 行 + 列名别名」。
 #   - 所有解析后的字段都返回 dict，但不写库。前端可逐条编辑 / 勾选后再 commit。
 
@@ -713,16 +869,14 @@ _KIND_TRANSFER_TOKENS = {"转账", "transfer", "划转", "内部转账"}
 _TEMPLATE_SKIP_LINES = {
     "wechat": 16,   # 微信账单 ~16 行说明（见微信支付账单导出）
     "alipay": 4,    # 支付宝 ~4 行说明
-    "cmb": 2,       # 招行流水通常 1-2 行表头说明
-    "generic": 0,
+    "generic": 0,   # 任意银行 / 平台 CSV：动态找表头，不预跳过
 }
 
 # 各模板的友好说明（前端显示给用户）
 TEMPLATE_DESCRIPTIONS = {
     "wechat": "微信账单 CSV — 支付 / 服务 → 钱包 → 账单 → 申请账单 → 用做记账。",
     "alipay": "支付宝账单 CSV — 我的 → 账单 → 右上角 → 开具交易流水证明 → 邮件接收 CSV。",
-    "cmb": "招行流水 CSV / TSV — 招行 App / 网银导出当月明细。",
-    "generic": "任意 CSV — 按列名（日期 / 金额 / 对方 / 备注 / 收/支）智能匹配。",
+    "generic": "任意银行 / 平台 CSV — 按列名（日期 / 金额 / 对方 / 备注 / 收/支）智能匹配。",
 }
 
 
@@ -1161,6 +1315,13 @@ def ensure_schema() -> None:
         # W3-H 多币种字段化：交易记原币 + 折算到本位币的快照（避免历史汇率漂移）
         ensure_column(connection, "transactions", "currency", "TEXT")
         ensure_column(connection, "transactions", "amount_in_base_currency", "REAL")
+        ensure_column(connection, "transactions", "deleted_at", "TEXT")
+        ensure_column(connection, "transactions", "deleted_by", "TEXT")
+        ensure_column(connection, "transactions", "deletion_reason", "TEXT")
+        ensure_column(connection, "transactions", "deletion_operation_id", "TEXT")
+        # 报销核销：垫付支出 → 覆盖它的回款收入 id（NULL = 未核销或快捷按钮手动标记）
+        ensure_column(connection, "transactions", "reimbursed_by", "TEXT")
+        ensure_audit_schema(connection)
         connection.commit()
     finally:
         connection.close()
@@ -1252,7 +1413,7 @@ def current_balance_for_account(connection: sqlite3.Connection, account_name: st
         """
         SELECT kind, amount, account_name, from_account_name, to_account_name
         FROM transactions
-        WHERE account_name = ? OR from_account_name = ? OR to_account_name = ?
+        WHERE deleted_at IS NULL AND (account_name = ? OR from_account_name = ? OR to_account_name = ?)
         """,
         (account_name, account_name, account_name),
     ).fetchall()
@@ -1390,6 +1551,12 @@ def load_ledger_settings(connection: sqlite3.Connection) -> dict:
     defaults["projects"] = normalize_projects(payload.get("projects"))
     defaults["financeSources"] = normalize_finance_sources(payload.get("financeSources"))
     defaults["counterparties"] = normalize_counterparties(payload.get("counterparties"))
+    # ledgerMode 迁移：payload 显式带则归一化；老库缺字段 → 按现存账户归属推断，
+    # 保证已有经营数据的库不会被误降级成 personal 而藏掉公司维度。
+    if "ledgerMode" in payload:
+        defaults["ledgerMode"] = normalize_ledger_mode(payload.get("ledgerMode"))
+    else:
+        defaults["ledgerMode"] = infer_ledger_mode(connection)
     return defaults
 
 
@@ -1457,6 +1624,7 @@ def row_to_transaction(row: sqlite3.Row, attachments: Optional[list] = None) -> 
         "projectName": row["project_name"],
         "note": row["note"],
         "reimbursementStatus": row["reimbursement_status"],
+        "reimbursedBy": _safe_row_get(row, "reimbursed_by"),
         "source": row["source"],
         "sourceName": row["source_name"],
         "counterpartyId": _safe_row_get(row, "counterparty_id"),
@@ -1465,6 +1633,10 @@ def row_to_transaction(row: sqlite3.Row, attachments: Optional[list] = None) -> 
         "taxCategory": _safe_row_get(row, "tax_category") or "personal",
         "currency": _safe_row_get(row, "currency"),
         "amountInBaseCurrency": _safe_row_get(row, "amount_in_base_currency"),
+        "deletedAt": _safe_row_get(row, "deleted_at"),
+        "deletedBy": _safe_row_get(row, "deleted_by"),
+        "deletionReason": _safe_row_get(row, "deletion_reason"),
+        "deletionOperationId": _safe_row_get(row, "deletion_operation_id"),
         "attachments": attachments or [],
     }
 
@@ -1486,6 +1658,7 @@ def dict_to_transaction(row: dict, attachments: Optional[list] = None) -> dict:
         "projectName": row.get("project_name"),
         "note": row["note"],
         "reimbursementStatus": row["reimbursement_status"],
+        "reimbursedBy": row.get("reimbursed_by"),
         "source": row["source"],
         "sourceName": row.get("source_name"),
         "counterpartyId": row.get("counterparty_id"),
@@ -1494,6 +1667,10 @@ def dict_to_transaction(row: dict, attachments: Optional[list] = None) -> dict:
         "taxCategory": row.get("tax_category") or "personal",
         "currency": row.get("currency"),
         "amountInBaseCurrency": row.get("amount_in_base_currency"),
+        "deletedAt": row.get("deleted_at"),
+        "deletedBy": row.get("deleted_by"),
+        "deletionReason": row.get("deletion_reason"),
+        "deletionOperationId": row.get("deletion_operation_id"),
         "attachments": attachments or [],
     }
 
@@ -1927,6 +2104,7 @@ def build_dashboard_overview(server_config: dict, view: str = "combined") -> dic
                 """
                 SELECT *
                 FROM transactions
+                WHERE deleted_at IS NULL
                 ORDER BY occurred_at DESC, created_at DESC
                 """
             ).fetchall()
@@ -1939,6 +2117,16 @@ def build_dashboard_overview(server_config: dict, view: str = "combined") -> dic
         ownership_map = account_ownership_map(connection)
     finally:
         connection.close()
+
+    known_account_names = {
+        str(account.get("name") or "")
+        for account in configuration["accounts"]
+        if account.get("name")
+    }
+    configuration["accounts"] = [
+        account for account in configuration["accounts"]
+        if not account.get("deletedAt")
+    ]
 
     if view in {"company", "personal"}:
         transactions = [
@@ -2025,7 +2213,9 @@ def build_dashboard_overview(server_config: dict, view: str = "combined") -> dic
         if account.get("name")
     }
 
-    for account_name in sorted(name for name in transaction_accounts if name and name not in account_lookup):
+    for account_name in sorted(
+        name for name in transaction_accounts if name and name not in known_account_names
+    ):
         account_lookup[account_name] = {
             "id": f"derived-{account_name}",
             "name": account_name,
@@ -2313,7 +2503,7 @@ def build_tax_report_workbook(year: int, quarter: Optional[int] = None) -> bytes
     connection = connect_db()
     try:
         rows = connection.execute(
-            "SELECT * FROM transactions ORDER BY occurred_at ASC, created_at ASC"
+            "SELECT * FROM transactions WHERE deleted_at IS NULL ORDER BY occurred_at ASC, created_at ASC"
         ).fetchall()
         ledger = load_ledger_settings(connection)
     finally:
@@ -2481,6 +2671,7 @@ def build_export_workbook(
             """
             SELECT *
             FROM transactions
+            WHERE deleted_at IS NULL
             ORDER BY occurred_at DESC, created_at DESC
             """
         ).fetchall()
@@ -2770,8 +2961,14 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/budget/status":
             self._handle_budget_status(parse_qs(parsed.query))
             return
+        if parsed.path == "/v1/habits":
+            self._handle_habits(parse_qs(parsed.query))
+            return
         if parsed.path == "/v1/configuration":
             self._handle_get_configuration()
+            return
+        if parsed.path == "/v1/audit/events":
+            self._handle_list_audit_events(parse_qs(parsed.query))
             return
         if parsed.path == "/v1/export/xlsx":
             self._handle_export_xlsx(parse_qs(parsed.query))
@@ -2806,6 +3003,12 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/rates/refresh":
             self._handle_refresh_rates()
+            return
+        if parsed.path == "/v1/agent/operations":
+            self._handle_agent_operation()
+            return
+        if parsed.path == "/v1/reimbursements/settle":
+            self._handle_settle_reimbursement()
             return
         # 1.6 上传附件（POST /v1/transactions/{txid}/attachments）
         parts = [p for p in parsed.path.split("/") if p]
@@ -2874,7 +3077,14 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return True
 
-        if path in {"/", "/dashboard", "/dashboard/"}:
+        if path == "/":
+            self.send_response(302)
+            self.send_header("Location", "/dashboard/")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return True
+
+        if path in {"/dashboard", "/dashboard/"}:
             self._send_file(WEB_DIR / "index.html")
             return True
 
@@ -2955,7 +3165,11 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
         month = query.get("month", [None])[0]
         category_id = query.get("categoryId", [None])[0]
         account_name = query.get("accountName", [None])[0]
+        include_deleted = query.get("includeDeleted", ["0"])[0] in {"1", "true", "yes"}
         limit = query.get("limit", [None])[0]
+
+        if not include_deleted:
+            items = [item for item in items if not item.get("deletedAt")]
 
         if view in {"company", "personal"}:
             items = [
@@ -3014,7 +3228,7 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
                 """
                 SELECT *
                 FROM transactions
-                WHERE substr(occurred_at, 1, 7) = ?
+                WHERE deleted_at IS NULL AND substr(occurred_at, 1, 7) = ?
                 """,
                 (prefix,),
             ).fetchall()
@@ -3204,6 +3418,101 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
             connection.close()
         self._send_json(200, {"ok": True, "id": rule_id})
 
+    def _handle_habits(self, query: dict) -> None:
+        """记账习惯查询：Agent 记简述账目（如"夜宵 10 元"）前先查这里补全默认值。
+        习惯不是独立存储，而是账本的实时投影——按新近度加权统计"该短语/该类别
+        历史上最常配的账户/项目/来源/报销状态"。习惯变了（最近记法变了）投影自动跟随；
+        单笔例外（如一次商务宴请）压不过日常多数，天然不污染常规默认。"""
+        phrase = (query.get("q", [""])[0] or "").strip()
+        category = (query.get("category", [""])[0] or "").strip()
+        connection = connect_db()
+        try:
+            rows = connection.execute(
+                """
+                SELECT title, merchant, note, category_json, account_name, project_name,
+                       source_name, reimbursement_status, occurred_at, kind
+                FROM transactions
+                WHERE deleted_at IS NULL AND source != 'adjustment'
+                ORDER BY occurred_at DESC
+                LIMIT 500
+                """
+            ).fetchall()
+        finally:
+            connection.close()
+
+        now = datetime.now(timezone.utc)
+
+        def recency_weight(occurred_at: str) -> float:
+            try:
+                dt = datetime.fromisoformat(str(occurred_at).replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                days = max(0, (now - dt).days)
+            except (ValueError, TypeError):
+                days = 365
+            return 0.98 ** min(days, 365)
+
+        def aggregate(matched: list) -> dict:
+            dims = {
+                "account": defaultdict(lambda: {"weight": 0.0, "count": 0, "lastUsedAt": ""}),
+                "project": defaultdict(lambda: {"weight": 0.0, "count": 0, "lastUsedAt": ""}),
+                "source": defaultdict(lambda: {"weight": 0.0, "count": 0, "lastUsedAt": ""}),
+                "category": defaultdict(lambda: {"weight": 0.0, "count": 0, "lastUsedAt": ""}),
+                "reimbursement": defaultdict(lambda: {"weight": 0.0, "count": 0, "lastUsedAt": ""}),
+            }
+            for row, weight, category_name in matched:
+                values = {
+                    "account": str(row["account_name"] or ""),
+                    "project": str(row["project_name"] or ""),
+                    "source": str(row["source_name"] or ""),
+                    "category": category_name,
+                    "reimbursement": str(row["reimbursement_status"] or "notApplicable"),
+                }
+                for dim, value in values.items():
+                    if not value:
+                        continue
+                    slot = dims[dim][value]
+                    slot["weight"] += weight
+                    slot["count"] += 1
+                    slot["lastUsedAt"] = max(slot["lastUsedAt"], str(row["occurred_at"] or ""))
+            result = {}
+            for dim, buckets in dims.items():
+                total = sum(item["weight"] for item in buckets.values()) or 1.0
+                ranked = sorted(buckets.items(), key=lambda kv: kv[1]["weight"], reverse=True)[:3]
+                result[dim] = [
+                    {
+                        "value": value,
+                        "count": item["count"],
+                        "share": round(item["weight"] / total, 3),
+                        "lastUsedAt": item["lastUsedAt"],
+                    }
+                    for value, item in ranked
+                ]
+            return result
+
+        phrase_matched = []
+        category_matched = []
+        for row in rows:
+            category_name = _category_name_from_row(row)
+            text = f"{row['title'] or ''} {row['merchant'] or ''} {row['note'] or ''}"
+            weight = recency_weight(row["occurred_at"])
+            if phrase and phrase in text:
+                phrase_matched.append((row, weight, category_name))
+            if category and category_name == category:
+                category_matched.append((row, weight, category_name))
+
+        self._send_json(200, {
+            "phrase": phrase,
+            "category": category,
+            "byPhrase": {"matches": len(phrase_matched), **aggregate(phrase_matched)},
+            "byCategory": {"matches": len(category_matched), **aggregate(category_matched)},
+            "hint": (
+                "byPhrase（用户原话词汇）命中时优先采用；其次 byCategory。"
+                "share ≥ 0.7 视为强习惯，可按此补全并在回显中标注来源；"
+                "share < 0.7 或零命中时向用户确认。单笔例外不会压过日常多数。"
+            ),
+        })
+
     def _handle_budget_status(self, query: dict) -> None:
         # 1.1 预算管理：返回每个有月度预算的分类，本月实际花费、剩余、占比。
         prefix = (query.get("month", [None])[0] or "").strip()
@@ -3218,7 +3527,7 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
                 """
                 SELECT category_json, amount
                 FROM transactions
-                WHERE kind = 'expense' AND substr(occurred_at, 1, 7) = ?
+                WHERE deleted_at IS NULL AND kind = 'expense' AND substr(occurred_at, 1, 7) = ?
                 """,
                 (prefix,),
             ).fetchall()
@@ -3359,6 +3668,163 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
     def _handle_get_configuration(self) -> None:
         self._send_json(200, load_configuration_payload())
 
+    def _handle_list_audit_events(self, query: dict) -> None:
+        try:
+            limit = min(max(int(query.get("limit", ["100"])[0]), 1), 500)
+        except ValueError:
+            limit = 100
+        connection = connect_db()
+        try:
+            rows = connection.execute(
+                "SELECT * FROM audit_events ORDER BY occurred_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        finally:
+            connection.close()
+        self._send_json(200, [
+            {
+                "id": row["id"], "occurredAt": row["occurred_at"], "actor": row["actor"],
+                "action": row["action"], "entityType": row["entity_type"],
+                "entityId": row["entity_id"], "entityName": row["entity_name"],
+                "impact": json.loads(row["impact_json"]), "payload": json.loads(row["payload_json"]),
+            }
+            for row in rows
+        ])
+
+    def _handle_agent_operation(self) -> None:
+        payload = self._read_json_body()
+        if payload is None:
+            return
+        entity_type = str(payload.get("entityType") or "").strip()
+        action = str(payload.get("action") or "").strip()
+        entity_id = str(payload.get("id") or "").strip()
+        patch = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        actor = str(payload.get("actor") or self.headers.get("X-FinOS-Actor") or "agent").strip()
+        if entity_type not in {"account", "category", "financeSource"} or action not in {"create", "update", "delete", "restore"}:
+            self._send_json(400, {"error": "Unsupported agent operation"})
+            return
+
+        # AI 防护闸：主数据增删改必须携带用户确认原话，随审计事件落库存证。
+        user_confirmation = str(payload.get("userConfirmation") or "").strip()
+        if not user_confirmation:
+            self._send_json(422, {
+                "error": "缺少 userConfirmation：AI 不得自行增改主数据，须先向用户提出建议并获得明确同意。",
+                "code": "user_confirmation_required",
+                "agentInstruction": (
+                    "把要做的变更（实体类型、名称、关键字段）讲给用户听，并给出可选方案；"
+                    "用户明确同意后重发本请求，userConfirmation 填用户的确认原话。"
+                ),
+            })
+            return
+
+        with MUTATION_LOCK:
+            now = utc_now_iso()
+            operation_id = str(uuid4())
+            connection = connect_db()
+            try:
+                if entity_type in {"account", "category"}:
+                    table = "accounts" if entity_type == "account" else "categories"
+                    rows = connection.execute(
+                        f"SELECT id, payload_json, sort_order FROM {table} ORDER BY sort_order, id"
+                    ).fetchall()
+                    records = [dict(json.loads(row["payload_json"]), id=row["id"], _sort=row["sort_order"]) for row in rows]
+                else:
+                    settings = load_ledger_settings(connection)
+                    records = [dict(item, _sort=index) for index, item in enumerate(settings.get("financeSources", []))]
+
+                target = next((item for item in records if item.get("id") == entity_id), None) if entity_id else None
+                if action == "create":
+                    if not entity_id:
+                        entity_id = f"{entity_type}-{uuid4()}"
+                    if target:
+                        self._send_json(409, {"error": "ID already exists"})
+                        return
+                    target = {"id": entity_id, **patch, "_sort": len(records)}
+                    target.setdefault("name", f"新{entity_type}")
+                    if entity_type == "account":
+                        target.setdefault("type", "cash")
+                        target.setdefault("currency", "CNY")
+                        target.setdefault("openingBalance", 0.0)
+                        target.setdefault("currentBalance", coerce_float(target["openingBalance"], 0.0))
+                        target.setdefault("ownership", "unspecified")
+                        target.setdefault("classification", "asset")
+                        target.setdefault("systemImage", "wallet.pass")
+                        target.setdefault("tintHex", "#607D8B")
+                    elif entity_type == "category":
+                        target.setdefault("systemImage", "tray")
+                        target.setdefault("tintHex", "#607D8B")
+                        target.setdefault("keywords", [])
+                        target.setdefault("direction", "支出")
+                    else:
+                        target.setdefault("icon", "wallet.pass")
+                    records.append(target)
+                elif not target:
+                    self._send_json(404, {"error": "Master data not found"})
+                    return
+
+                previous = {} if action == "create" else dict(target)
+                if action == "update":
+                    if target.get("deletedAt"):
+                        self._send_json(409, {"error": "Restore deleted master data before updating it"})
+                        return
+                    target.update(patch)
+                elif action == "delete":
+                    if target.get("deletedAt"):
+                        self._send_json(409, {"error": "Master data is already deleted"})
+                        return
+                    target["deletedAt"] = now
+                    target["deletedBy"] = actor
+                    target["deletionReason"] = str(payload.get("reason") or "Agent 删除")
+                    if entity_type == "account":
+                        opening = coerce_float(target.get("openingBalance"), 0.0)
+                        balance = current_balance_for_account(connection, str(target.get("name") or ""), opening)
+                        classification = target.get("classification") or ("liability" if target.get("type") == "creditCard" else "asset")
+                        target["deletionImpact"] = {
+                            "balance": round(balance, 2),
+                            "assetDelta": round(-balance, 2) if classification == "asset" else 0.0,
+                            "liabilityDelta": round(-balance, 2) if classification == "liability" else 0.0,
+                            "netWorthDelta": round(-balance if classification == "asset" else balance, 2),
+                        }
+                elif action == "restore":
+                    for key in ("deletedAt", "deletedBy", "deletionReason", "deletionImpact"):
+                        target.pop(key, None)
+
+                target.pop("_sort", None)
+                if entity_type in {"account", "category"}:
+                    table = "accounts" if entity_type == "account" else "categories"
+                    connection.execute(
+                        f"UPDATE {table} SET payload_json = ?, updated_at = ? WHERE id = ?",
+                        (json.dumps(target, ensure_ascii=False), now, entity_id),
+                    ) if action != "create" else connection.execute(
+                        f"INSERT INTO {table} (id, payload_json, sort_order, updated_at) VALUES (?, ?, ?, ?)",
+                        (entity_id, json.dumps(target, ensure_ascii=False), len(records) - 1, now),
+                    )
+                else:
+                    settings["financeSources"] = [{key: value for key, value in item.items() if key != "_sort"} for item in records]
+                    settings["updatedAt"] = now
+                    connection.execute(
+                        "UPDATE ledger_settings SET payload_json = ?, updated_at = ? WHERE id = 1",
+                        (json.dumps(settings, ensure_ascii=False), now),
+                    )
+
+                event = {
+                    "id": operation_id, "occurredAt": now, "actor": actor, "action": action,
+                    "entityType": entity_type, "entityId": entity_id,
+                    "entityName": str(target.get("name") or entity_id),
+                    "userConfirmation": user_confirmation,
+                    "impact": target.get("deletionImpact", {}),
+                    "payload": {"before": {k: v for k, v in previous.items() if k != "_sort"}, "after": target},
+                }
+                append_audit_event(connection, event)
+                connection.commit()
+            finally:
+                connection.close()
+            try:
+                event["gitCommit"] = checkpoint_database(DB_PATH, RUNTIME_DIR, event)
+            except Exception as exc:
+                self._send_json(500, {"error": f"Operation saved but Git checkpoint failed: {exc}", "operation": event})
+                return
+        self._send_json(200, {"ok": True, "operation": event, "entity": target})
+
     def _handle_put_configuration(self) -> None:
         payload = self._read_json_body()
         if payload is None:
@@ -3368,6 +3834,23 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
         accounts = payload.get("accounts") or []
         settings = payload.get("settings") or default_ledger_settings()
         now = utc_now_iso()
+
+        # 记账模式：前端会回传 ledgerMode；兜底按提交账户是否含 company 归属推断，
+        # 防止旧前端漏传把 dual 库误降级成 personal。
+        ledger_mode = normalize_ledger_mode(
+            settings.get("ledgerMode"),
+            fallback=(
+                "dual"
+                if any(isinstance(a, dict) and a.get("ownership") == "company" for a in accounts)
+                else "personal"
+            ),
+        )
+        # 引用完整性基准：本次提交的全部账户 id 集合。defaultAccountId 不在其中即视为悬空。
+        valid_account_ids = {
+            str(item.get("id") or f"account-{index + 1}")
+            for index, item in enumerate(accounts)
+            if isinstance(item, dict)
+        }
 
         normalized_categories = []
         for index, item in enumerate(categories):
@@ -3385,10 +3868,13 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
                             "keywords": normalize_keywords(item.get("keywords"), category_name),
                             "direction": "收入" if item.get("direction") == "收入" else "支出",
                             "group": str(item.get("group") or ""),
-                            "defaultAccountId": str(item.get("defaultAccountId") or ""),
+                            "defaultAccountId": scrub_account_ref(item.get("defaultAccountId"), valid_account_ids),
                             "projectId": str(item.get("projectId") or ""),
                             "note": str(item.get("note") or ""),
                             "monthlyBudget": coerce_float(item.get("monthlyBudget"), 0.0),
+                            "deletedAt": item.get("deletedAt") or None,
+                            "deletedBy": item.get("deletedBy") or None,
+                            "deletionReason": item.get("deletionReason") or None,
                         },
                         ensure_ascii=False,
                     ),
@@ -3478,9 +3964,15 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
                             ),
                             "note": str(item.get("note") or ""),
                             "flowRole": str(item.get("flowRole") or ""),
+                            # personal 模式下缺省归属一律 personal，避免 infer 把"工资卡"误判成 company；
+                            # 已带显式 ownership 的账户（dual 侧数据）仍原样保留，切模式不丢数据。
                             "ownership": normalize_ownership(
                                 item.get("ownership"),
-                                fallback=infer_account_ownership(item),
+                                fallback=(
+                                    "personal"
+                                    if ledger_mode == "personal"
+                                    else infer_account_ownership(item)
+                                ),
                             ),
                             # 1.5 资产/负债：缺省 asset；creditLimit 仅 liability 有意义
                             "classification": (
@@ -3489,6 +3981,10 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
                                 else ("liability" if item.get("type") == "creditCard" else "asset")
                             ),
                             "creditLimit": coerce_float(item.get("creditLimit"), 0.0),
+                            "deletedAt": item.get("deletedAt") or None,
+                            "deletedBy": item.get("deletedBy") or None,
+                            "deletionReason": item.get("deletionReason") or None,
+                            "deletionImpact": item.get("deletionImpact") if isinstance(item.get("deletionImpact"), dict) else None,
                         },
                         ensure_ascii=False,
                     ),
@@ -3499,6 +3995,7 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
 
         normalized_settings = {
             "bookMode": settings.get("bookMode", "personalAssistant"),
+            "ledgerMode": ledger_mode,
             "defaultCurrency": settings.get("defaultCurrency", "CNY"),
             "baseUnit": settings.get("baseUnit", "yuan"),
             "timezone": settings.get("timezone", "Asia/Shanghai"),
@@ -3510,6 +4007,11 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
             "exchangeRates": normalize_exchange_rates(settings.get("exchangeRates")),
             "updatedAt": now,
         }
+        # 引用完整性：清空资金来源 / 对手方里指向不存在账户的 defaultAccountId。
+        for _src in normalized_settings["financeSources"]:
+            _src["defaultAccountId"] = scrub_account_ref(_src.get("defaultAccountId"), valid_account_ids)
+        for _cp in normalized_settings["counterparties"]:
+            _cp["defaultAccountId"] = scrub_account_ref(_cp.get("defaultAccountId"), valid_account_ids)
 
         connection = connect_db()
         try:
@@ -3589,16 +4091,27 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
 
         connection = connect_db()
         try:
+            # AI 防护闸：openClaw 通道引用未知主数据 → 422，逼 Agent 先问用户
+            guard = validate_agent_transaction_refs(connection, row)
+            if guard is not None:
+                self._send_json(422, guard)
+                return
             connection.execute(
                 """
                 INSERT INTO transactions (
                     id, title, amount, kind, occurred_at, category_json, tags_json,
                     account_name, from_account_name, to_account_name, merchant, project_name,
-                    note, reimbursement_status, source, source_name, created_at, updated_at
+                    note, reimbursement_status, source, source_name,
+                    counterparty_id, invoice_issued, invoice_attachment_id,
+                    tax_category, currency, amount_in_base_currency,
+                    created_at, updated_at
                 ) VALUES (
                     :id, :title, :amount, :kind, :occurred_at, :category_json, :tags_json,
                     :account_name, :from_account_name, :to_account_name, :merchant, :project_name,
-                    :note, :reimbursement_status, :source, :source_name, :created_at, :updated_at
+                    :note, :reimbursement_status, :source, :source_name,
+                    :counterparty_id, :invoice_issued, :invoice_attachment_id,
+                    :tax_category, :currency, :amount_in_base_currency,
+                    :created_at, :updated_at
                 )
                 """,
                 row,
@@ -3637,6 +4150,11 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
                 transaction_id=transaction_id,
                 existing_row=existing_row,
             )
+            # AI 防护闸：仅校验相对原记录变化的引用，避免误伤存量编辑
+            guard = validate_agent_transaction_refs(connection, row, existing_row=existing_row)
+            if guard is not None:
+                self._send_json(422, guard)
+                return
             connection.execute(
                 """
                 UPDATE transactions
@@ -3675,36 +4193,49 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
         self._send_json(200, dict_to_transaction(row))
 
     def _handle_delete_transaction(self, transaction_id: str) -> None:
-        connection = connect_db()
-        try:
-            # 1.6 级联删除附件文件
-            for row in connection.execute(
-                "SELECT stored_path FROM attachments WHERE transaction_id = ?", (transaction_id,)
-            ).fetchall():
-                try:
-                    Path(row["stored_path"]).unlink(missing_ok=True)
-                except Exception:
-                    pass
-            connection.execute("DELETE FROM attachments WHERE transaction_id = ?", (transaction_id,))
-            cursor = connection.execute(
-                """
-                DELETE FROM transactions
-                WHERE id = ?
-                """,
-                (transaction_id,),
-            )
-            connection.commit()
-        finally:
-            connection.close()
-
-        if cursor.rowcount == 0:
-            self._send_json(404, {"error": "Transaction not found"})
-            return
-
-        now = utc_now_iso()
+        actor = str(self.headers.get("X-FinOS-Actor") or "dashboard").strip()
+        reason = str(
+            parse_qs(urlparse(self.path).query).get("reason", ["删除流水"])[0] or "删除流水"
+        ).strip()
+        with MUTATION_LOCK:
+            now = utc_now_iso()
+            operation_id = str(uuid4())
+            connection = connect_db()
+            try:
+                row = connection.execute("SELECT * FROM transactions WHERE id = ?", (transaction_id,)).fetchone()
+                if row is None:
+                    self._send_json(404, {"error": "Transaction not found"})
+                    return
+                transaction = row_to_transaction(row)
+                cursor = connection.execute(
+                    """
+                    UPDATE transactions
+                    SET deleted_at = ?, deleted_by = ?, deletion_reason = ?, deletion_operation_id = ?, updated_at = ?
+                    WHERE id = ? AND deleted_at IS NULL
+                    """,
+                    (now, actor, reason, operation_id, now, transaction_id),
+                )
+                if cursor.rowcount == 0:
+                    self._send_json(409, {"error": "Transaction is already deleted"})
+                    return
+                event = {
+                    "id": operation_id, "occurredAt": now, "actor": actor, "action": "delete",
+                    "entityType": "transaction", "entityId": transaction_id, "entityName": transaction["title"],
+                    "impact": {"amount": transaction["amount"], "kind": transaction["kind"], "accountName": transaction["accountName"]},
+                    "payload": {"before": transaction},
+                }
+                append_audit_event(connection, event)
+                connection.commit()
+            finally:
+                connection.close()
+            try:
+                event["gitCommit"] = checkpoint_database(DB_PATH, RUNTIME_DIR, event)
+            except Exception as exc:
+                self._send_json(500, {"error": f"Transaction deleted but Git checkpoint failed: {exc}", "operation": event})
+                return
         self.server.config["lastIngestedAt"] = now
         self._persist_server_config()
-        self._send_json(200, {"ok": True, "id": transaction_id})
+        self._send_json(200, {"ok": True, "id": transaction_id, "operation": event})
 
     def _handle_update_reimbursement(self, transaction_id: str) -> None:
         payload = self._read_json_body()
@@ -3712,20 +4243,23 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
             return
 
         status = payload.get("status")
-        if not status:
-            self._send_json(400, {"error": "Missing status"})
+        if status not in {"notApplicable", "draft", "submitted", "reimbursed", "rejected"}:
+            self._send_json(400, {"error": "Invalid status"})
             return
 
         connection = connect_db()
         try:
-            cursor = connection.execute(
-                """
-                UPDATE transactions
-                SET reimbursement_status = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (status, utc_now_iso(), transaction_id),
-            )
+            # 离开 reimbursed 状态时清空回款关联，避免残留悬空的核销链接
+            if status == "reimbursed":
+                cursor = connection.execute(
+                    "UPDATE transactions SET reimbursement_status = ?, updated_at = ? WHERE id = ?",
+                    (status, utc_now_iso(), transaction_id),
+                )
+            else:
+                cursor = connection.execute(
+                    "UPDATE transactions SET reimbursement_status = ?, reimbursed_by = NULL, updated_at = ? WHERE id = ?",
+                    (status, utc_now_iso(), transaction_id),
+                )
             connection.commit()
         finally:
             connection.close()
@@ -3735,6 +4269,80 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
             return
 
         self._send_json(200, {"ok": True, "id": transaction_id, "status": status})
+
+    def _handle_settle_reimbursement(self) -> None:
+        """回款核销：一笔报销回款收入 ↔ 多笔垫付支出的批量对账。
+
+        payload: { incomeId, settleIds: [...], unsettleIds: [...] }
+        - settleIds: 勾选的垫付 → reimbursed + 挂到 incomeId 名下
+        - unsettleIds: 取消勾选的垫付 → 退回 draft；仅允许解开挂在 incomeId 名下的（防串账）
+        """
+        payload = self._read_json_body()
+        if payload is None:
+            return
+
+        income_id = str(payload.get("incomeId") or "")
+        settle_ids = [str(item) for item in (payload.get("settleIds") or []) if item]
+        unsettle_ids = [str(item) for item in (payload.get("unsettleIds") or []) if item]
+        if not income_id:
+            self._send_json(400, {"error": "Missing incomeId"})
+            return
+        if not settle_ids and not unsettle_ids:
+            self._send_json(400, {"error": "Nothing to settle"})
+            return
+
+        connection = connect_db()
+        try:
+            income_row = connection.execute(
+                "SELECT id, kind, deleted_at FROM transactions WHERE id = ?", (income_id,)
+            ).fetchone()
+            if income_row is None or income_row["deleted_at"]:
+                self._send_json(404, {"error": "Income transaction not found"})
+                return
+            if income_row["kind"] != "income":
+                self._send_json(422, {"error": "incomeId must reference an income transaction"})
+                return
+
+            now = utc_now_iso()
+            settled = 0
+            unsettled = 0
+            invalid = []
+            for expense_id in settle_ids:
+                row = connection.execute(
+                    "SELECT id, kind, reimbursement_status, deleted_at FROM transactions WHERE id = ?",
+                    (expense_id,),
+                ).fetchone()
+                if (
+                    row is None
+                    or row["deleted_at"]
+                    or row["kind"] != "expense"
+                    or row["reimbursement_status"] in (None, "", "notApplicable")
+                ):
+                    invalid.append(expense_id)
+                    continue
+                connection.execute(
+                    "UPDATE transactions SET reimbursement_status = 'reimbursed', reimbursed_by = ?, updated_at = ? WHERE id = ?",
+                    (income_id, now, expense_id),
+                )
+                settled += 1
+            for expense_id in unsettle_ids:
+                cursor = connection.execute(
+                    "UPDATE transactions SET reimbursement_status = 'draft', reimbursed_by = NULL, updated_at = ? "
+                    "WHERE id = ? AND reimbursed_by = ?",
+                    (now, expense_id, income_id),
+                )
+                unsettled += cursor.rowcount
+            connection.commit()
+        finally:
+            connection.close()
+
+        self._send_json(200, {
+            "ok": True,
+            "incomeId": income_id,
+            "settled": settled,
+            "unsettled": unsettled,
+            "invalid": invalid,
+        })
 
     # ---- 1.6 附件 ----
 

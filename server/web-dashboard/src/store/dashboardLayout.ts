@@ -5,6 +5,7 @@ export type DashboardWidgetId =
   | "status-cards"
   | "tax-kpi"
   | "invoice-workbench"
+  | "reimbursement-pie"
   | "budget-progress"
   | "savings-goals"
   | "cashflow-forecast"
@@ -23,6 +24,7 @@ const DEFAULT_ORDER: DashboardWidget[] = [
   { id: "status-cards", visible: true },
   { id: "tax-kpi", visible: false }, // 默认隐藏；创业者用户在自定义里打开
   { id: "invoice-workbench", visible: false }, // 默认隐藏；按需打开
+  { id: "reimbursement-pie", visible: true }, // 报销总览扇形图
   { id: "budget-progress", visible: true },
   { id: "savings-goals", visible: true },
   { id: "cashflow-forecast", visible: true },
@@ -106,6 +108,7 @@ export const WIDGET_LABEL: Record<DashboardWidgetId, string> = {
   "status-cards": "顶部 KPI（净资产 / 收支 / 净额）",
   "tax-kpi": "税务 KPI（本季度业务收入 / 净利润 / 预估个税）",
   "invoice-workbench": "发票工作台（应开未上传 / 已绑定 / 全部）",
+  "reimbursement-pie": "报销总览（待报销 / 已报销扇形图）",
   "budget-progress": "预算进度",
   "savings-goals": "储蓄目标",
   "cashflow-forecast": "现金流预测",

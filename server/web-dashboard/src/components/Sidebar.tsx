@@ -4,14 +4,15 @@ import clsx from "clsx";
 import {
   BarChart3,
   CalendarDays,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   GitBranch,
   ReceiptText,
+  Shapes,
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import { Autocomplete } from "./ui/Autocomplete";
 import { useTimeRangeStore, type TimeDimension } from "../store/timeRange";
 import {
   deriveBuckets,
@@ -41,7 +42,14 @@ const quickRanges: Array<{ value: PickerDimension | "all"; label: string }> = [
   { value: "all", label: "全部" },
 ];
 
-const navItems = [
+// 两个体系分区渲染：设计系统在水平分隔线上方，财务管理系统在下方
+type NavItem = { to: string; label: string; icon: typeof Shapes; end?: boolean };
+
+const designNavItems: NavItem[] = [
+  { to: "/design", label: "设计系统", icon: Shapes },
+];
+
+const financeNavItems: NavItem[] = [
   { to: "/", label: "资金流量", icon: GitBranch, end: true },
   { to: "/status", label: "财务状况", icon: BarChart3 },
   { to: "/ledger", label: "资金流水", icon: ReceiptText },
@@ -60,6 +68,29 @@ const monthNames = Array.from({ length: 12 }, (_, index) =>
 );
 
 export function Sidebar({ open, onClose, transactions }: Props) {
+  const renderNavItem = (item: NavItem) => {
+    const Icon = item.icon;
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        end={item.end}
+        onClick={onClose}
+        className={({ isActive }) =>
+          clsx(
+            "flex h-9 items-center gap-3 rounded-md px-3 text-[14px] font-semibold transition-colors",
+            isActive
+              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+              : "text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-foreground",
+          )
+        }
+      >
+        <Icon size={17} />
+        {item.label}
+      </NavLink>
+    );
+  };
+
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
   const [pickerOpen, setPickerOpen] = useState<PickerDimension | null>(null);
   const [draftRange, setDraftRange] = useState<DateRangeDraft>({});
@@ -198,19 +229,17 @@ export function Sidebar({ open, onClose, transactions }: Props) {
                     <X size={14} />
                   </button>
                 </div>
-                <select
-                  autoFocus
+                <Autocomplete
+                  ariaLabel="选择快速定位区间"
                   value={bucket}
-                  onChange={(event) => chooseBucket(event.target.value)}
-                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-[13px] text-foreground outline-none"
-                >
-                  {availableBuckets.length === 0 && <option value="">暂无流水时间</option>}
-                  {availableBuckets.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => chooseBucket(value)}
+                  options={
+                    availableBuckets.length === 0
+                      ? [{ value: "", label: "暂无流水时间", disabled: true }]
+                      : availableBuckets
+                  }
+                  placeholder="选择区间…"
+                />
               </div>
             )}
           </section>
@@ -226,7 +255,8 @@ export function Sidebar({ open, onClose, transactions }: Props) {
                 <ChevronLeft size={16} />
               </button>
               <div className="grid flex-1 grid-cols-[1fr_92px] gap-2">
-                <FlatSelect
+                <Autocomplete
+                  size="sm"
                   ariaLabel="选择月份"
                   value={String(visibleMonth.getMonth())}
                   onChange={(value) => changeMonth(Number(value))}
@@ -235,7 +265,8 @@ export function Sidebar({ open, onClose, transactions }: Props) {
                     label: name,
                   }))}
                 />
-                <FlatSelect
+                <Autocomplete
+                  size="sm"
                   ariaLabel="选择年份"
                   value={String(visibleMonth.getFullYear())}
                   onChange={(value) => changeYear(Number(value))}
@@ -307,31 +338,10 @@ export function Sidebar({ open, onClose, transactions }: Props) {
             </div>
           </section>
 
-          <nav className="mt-auto border-t border-sidebar-border pt-2.5">
-            <div className="space-y-1.5">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    onClick={onClose}
-                    className={({ isActive }) =>
-                      clsx(
-                        "flex h-9 items-center gap-3 rounded-md px-3 text-[14px] font-semibold transition-colors",
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                          : "text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-foreground",
-                      )
-                    }
-                  >
-                    <Icon size={17} />
-                    {item.label}
-                  </NavLink>
-                );
-              })}
-            </div>
+          <nav className="mt-auto pt-2.5">
+            <div className="space-y-1.5">{designNavItems.map(renderNavItem)}</div>
+            <div className="my-2.5 border-t border-sidebar-border" />
+            <div className="space-y-1.5">{financeNavItems.map(renderNavItem)}</div>
           </nav>
         </div>
       </aside>
@@ -339,39 +349,6 @@ export function Sidebar({ open, onClose, transactions }: Props) {
   );
 }
 
-function FlatSelect({
-  ariaLabel,
-  value,
-  onChange,
-  options,
-}: {
-  ariaLabel: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <div className="relative">
-      <select
-        aria-label={ariaLabel}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-8 w-full appearance-none rounded-md border border-sidebar-border bg-sidebar-accent/40 pl-2 pr-6 text-center text-[13px] font-semibold text-foreground outline-none transition-colors hover:bg-sidebar-accent focus:border-primary"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        size={12}
-        strokeWidth={2.2}
-        className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-      />
-    </div>
-  );
-}
 
 function syncVisibleMonth(
   dim: PickerDimension,
