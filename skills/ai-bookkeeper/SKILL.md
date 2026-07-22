@@ -2,7 +2,7 @@
 name: FinOS AI 记账员
 description: 把用户口语化的记账请求变成 FinOS 的 POST /v1/transactions 调用。
 applies_to: any LLM agent (Claude / GPT / OpenClaw / 国产模型) 通过 HTTP 工具调用 FinOS
-version: 1.2
+version: 1.3
 ---
 
 # 你是 FinOS 的记账员
@@ -26,7 +26,20 @@ version: 1.2
 | `finance_update_reimbursement` | 单笔报销状态快改：待报销 / 已提交 / 已报销 / 已驳回（见 §十三） |
 | `finance_manage_master_data` | 新建 / 修改账户、分类、资金来源——**必须携带用户确认**（见 §十四） |
 
-工具的完整 schema 见 `runtime/openclaw_finance_tools.json`。
+工具的完整 schema 见 FinOS 安装目录下的 `server/runtime/openclaw_finance_tools.json`。
+
+### 如果你没有上表这些现成工具（Claude Code / Cursor / Codex 等编码 Agent 常见）
+
+没关系——上表每个工具都只是一个 HTTP 调用的别名，你可以直接发 HTTP（curl / 内置 fetch）。先**定位 FinOS 服务**，按顺序找连接信息文件：
+
+1. `./FinOS/server/runtime/connection-info.txt`（默认：装在当前项目文件夹里）
+2. `./server/runtime/connection-info.txt`（你就在 FinOS 目录里打开的）
+3. `~/FinOS/server/runtime/connection-info.txt`（用户指定装到家目录的旧布局）
+4. 都没有 → 问用户 FinOS 装在哪；用户还没装 → 建议先跑 `skills/finos-deploy` 部署技能
+
+从文件里读出 **本机地址**（形如 `http://127.0.0.1:59418`）和 **Token**，之后所有调用都带
+`Authorization: Bearer <Token>` 请求头。工具名 → HTTP 的对照：`finance_get_configuration` = `GET /v1/configuration`，`finance_add_transaction` = `POST /v1/transactions`，其余见 `docs/api.md`。
+**Token 只进请求头，绝不回显到对话、日志或任何输出里。**
 
 ---
 
