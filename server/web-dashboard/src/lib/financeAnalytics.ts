@@ -51,16 +51,22 @@ export function filterTransactions(
   );
 }
 
+/** 汇总取本位币折算额（外币交易 amount 是原币，直接相加会混币）；缺快照时回退原币。 */
+function baseAmount(tx: Transaction): number {
+  const b = tx.amountInBaseCurrency;
+  return typeof b === "number" && Number.isFinite(b) ? b : tx.amount;
+}
+
 export function summarizeTransactions(transactions: Transaction[]) {
   const income = transactions
     .filter((tx) => tx.kind === "income")
-    .reduce((sum, tx) => sum + tx.amount, 0);
+    .reduce((sum, tx) => sum + baseAmount(tx), 0);
   const expense = transactions
     .filter((tx) => tx.kind === "expense")
-    .reduce((sum, tx) => sum + tx.amount, 0);
+    .reduce((sum, tx) => sum + baseAmount(tx), 0);
   const transfer = transactions
     .filter((tx) => tx.kind === "transfer")
-    .reduce((sum, tx) => sum + tx.amount, 0);
+    .reduce((sum, tx) => sum + baseAmount(tx), 0);
   const dates = new Set(transactions.map((tx) => tx.occurredAt.slice(0, 10)).filter(Boolean));
   return {
     income,

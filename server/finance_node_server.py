@@ -33,6 +33,9 @@ CONFIG_PATH = RUNTIME_DIR / "config.json"
 DB_PATH = RUNTIME_DIR / "finance.sqlite3"
 ATTACHMENTS_DIR = RUNTIME_DIR / "attachments"
 ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024  # 10 MB hard cap per file
+# 请求体硬顶：base64 后的 10MB 附件约 13.3MB + JSON 包裹，取 32MB 覆盖合法导入/上传，
+# 读入前即拒绝超限，防超大 body 内存耗尽 DoS。
+MAX_JSON_BODY_BYTES = 32 * 1024 * 1024
 WEB_DIR = ROOT / "web"
 # 静态资源的唯一可读根：任何 _send_file 目标必须解析后仍落在此目录内，
 # 否则视为目录穿越（读 runtime/config.json 偷 token、下载整库、读任意文件）。
@@ -608,9 +611,13 @@ def coerce_float(value: object, default: float = 0.0) -> float:
     try:
         if value in {None, ""}:
             return default
-        return float(value)
+        result = float(value)
     except (TypeError, ValueError):
         return default
+    # 拒绝 NaN/Infinity（JSON 默认 allow_nan，会污染汇总/余额），回落默认值。
+    if result != result or result in (float("inf"), float("-inf")):
+        return default
+    return result
 
 
 def coerce_bool(value: object, default: bool = False) -> bool:
@@ -1420,11 +1427,21 @@ def list_categories(connection: sqlite3.Connection) -> list:
     return [json.loads(row["payload_json"]) for row in rows]
 
 
-def current_balance_for_account(connection: sqlite3.Connection, account_name: str, opening_balance: float) -> float:
+def current_balance_for_account(
+    connection: sqlite3.Connection,
+    account_name: str,
+    opening_balance: float,
+    classification: str = "asset",
+) -> float:
     # openingBalance 是账户的"初始基线"。当前余额 = 初始基线 + 全部相关
     # 交易差额（含 source='adjustment' 的余额对账交易）。当用户在设置页
     # 直接改"当前余额"时，PUT /v1/configuration 会自动写入一条 adjustment
     # 交易补差，让黑洞资金在账本里可追溯（见 _handle_put_configuration）。
+    #
+    # 资产/负债口径分叉：负债账户（信用卡/贷款）的 openingBalance 与 currentBalance
+    # 语义是"正数=已欠"。信用卡刷卡(expense, delta 减)应让"已欠"上升、还款(income/转入)
+    # 应让"已欠"下降——故负债用 opening - delta。前端净资产(sign=-1)、availableCredit、
+    # totalLiabilities、build_adjustment_payload 都按"正数已欠"口径写，唯此生产者需对齐。
     rows = connection.execute(
         """
         SELECT kind, amount, account_name, from_account_name, to_account_name
@@ -1448,6 +1465,9 @@ def current_balance_for_account(connection: sqlite3.Connection, account_name: st
                 delta -= amount
             if to_account_name == account_name:
                 delta += amount
+    if classification == "liability":
+        # 负债：正数=已欠。expense(delta 减) → 已欠增；income/转入(delta 增) → 已欠减。
+        return opening_balance - delta
     return opening_balance + delta
 
 
@@ -1485,6 +1505,7 @@ def list_accounts(connection: sqlite3.Connection) -> list:
             connection,
             payload.get("name", ""),
             opening_balance,
+            classification,
         )
         # 信用卡可用额度 = 总额度 - 当前已欠
         if classification == "liability" and credit_limit > 0:
@@ -2243,22 +2264,30 @@ def build_dashboard_overview(server_config: dict, view: str = "combined") -> dic
             "keywords": [],
         }
 
+    def _net_contribution(item: dict) -> float:
+        # 净值贡献：资产 = +当前余额；负债(信用卡/贷款) = -已欠。
+        # 负债 currentBalance 已是"正数已欠"（见 current_balance_for_account），故取负。
+        raw = float(item.get("currentBalance") or item.get("openingBalance") or 0)
+        cls = item.get("classification") or ("liability" if item.get("type") == "creditCard" else "asset")
+        return -raw if cls == "liability" else raw
+
     accounts = []
     total_assets = 0.0
     balance_values = []
     sorted_account_items = sorted(
         account_lookup.values(),
-        key=lambda item: float(item.get("currentBalance") or item.get("openingBalance") or 0),
+        key=_net_contribution,
         reverse=True,
     )
     for index, account in enumerate(sorted_account_items):
-        balance = float(account.get("currentBalance") or account.get("openingBalance") or 0)
-        total_assets += balance
-        balance_values.append(balance)
+        # 汇总与柱状图用净值贡献：负债显示为负条、不再被当作正资产计入 runway。
+        contribution = _net_contribution(account)
+        total_assets += contribution
+        balance_values.append(contribution)
         accounts.append(
             {
                 "name": account.get("name") or "未命名账户",
-                "amount": round(balance, 2),
+                "amount": round(contribution, 2),
                 "color": account_bar_color(account.get("tintHex"), index),
             }
         )
@@ -3264,10 +3293,13 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
 
         income = sum(item["amount"] for item in items if item["kind"] == "income")
         expense = sum(item["amount"] for item in items if item["kind"] == "expense")
+        # 待回款口径须与前端 isPendingReimbursement 对齐：支出且状态 ∈ {draft,submitted,rejected}。
+        # 已驳回不是终态（可二次报销/申诉），仍算被欠的钱，不能漏计。
         pending = sum(
             item["amount"]
             for item in items
-            if item.get("reimbursementStatus") in {"draft", "submitted"}
+            if item["kind"] == "expense"
+            and item.get("reimbursementStatus") in {"draft", "submitted", "rejected"}
         )
         self._send_json(
             200,
@@ -3795,8 +3827,8 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
                     target["deletionReason"] = str(payload.get("reason") or "Agent 删除")
                     if entity_type == "account":
                         opening = coerce_float(target.get("openingBalance"), 0.0)
-                        balance = current_balance_for_account(connection, str(target.get("name") or ""), opening)
                         classification = target.get("classification") or ("liability" if target.get("type") == "creditCard" else "asset")
+                        balance = current_balance_for_account(connection, str(target.get("name") or ""), opening, classification)
                         target["deletionImpact"] = {
                             "balance": round(balance, 2),
                             "assetDelta": round(-balance, 2) if classification == "asset" else 0.0,
@@ -3945,7 +3977,7 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
                 if "currentBalance" in item:
                     intended_current = coerce_float(item.get("currentBalance"), 0.0)
                     with closing(connect_db()) as _calc:
-                        current_now = current_balance_for_account(_calc, balance_lookup_name, opening_to_persist)
+                        current_now = current_balance_for_account(_calc, balance_lookup_name, opening_to_persist, classification_value)
                     delta = intended_current - current_now
                     if abs(delta) > 0.005:
                         adjustment_pending.append({
@@ -4121,9 +4153,25 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
 
         self._send_json(200, load_configuration_payload())
 
+    def _amount_payload_invalid(self, payload: dict) -> bool:
+        """校验 payload 里的 amount（若提供）为有限非负数，非法则回 400 并返回 True。"""
+        if "amount" not in payload or payload.get("amount") is None:
+            return False
+        try:
+            amt = float(payload["amount"])
+        except (TypeError, ValueError):
+            self._send_json(400, {"error": "amount 必须是数字"})
+            return True
+        if amt != amt or amt in (float("inf"), float("-inf")) or amt < 0:
+            self._send_json(400, {"error": "amount 必须是有限的非负数"})
+            return True
+        return False
+
     def _handle_create_transaction(self) -> None:
         payload = self._read_json_body()
         if payload is None:
+            return
+        if self._amount_payload_invalid(payload):
             return
 
         now = utc_now_iso()
@@ -4171,6 +4219,8 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
     def _handle_update_transaction(self, transaction_id: str) -> None:
         payload = self._read_json_body()
         if payload is None:
+            return
+        if self._amount_payload_invalid(payload):
             return
 
         connection = connect_db()
@@ -4507,7 +4557,16 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
         self._send_json(200, {"ok": True, "id": attachment_id})
 
     def _read_json_body(self) -> Optional[dict]:
-        length = int(self.headers.get("Content-Length", "0"))
+        # 读入前先按 Content-Length 卡上限，杜绝超大 body 一次性读入内存耗尽（DoS）。
+        # 附件/导入的 base64 内容级 413 校验仍保留；此处是原始请求体的硬顶。
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self._send_json(400, {"error": "Invalid Content-Length"})
+            return None
+        if length < 0 or length > MAX_JSON_BODY_BYTES:
+            self._send_json(413, {"error": "Request body too large"})
+            return None
         try:
             raw = self.rfile.read(length) if length else b"{}"
             return json.loads(raw.decode("utf-8"))
@@ -4617,6 +4676,14 @@ def main() -> None:
 
     host = config.get("host", "127.0.0.1")
     port = int(config.get("port", 31888))
+    # 安全告警：绑定非回环地址且未设 token = 财务 API 对网络完全裸奔。
+    # 不硬阻断（隧道/可信内网后的高级用法保留），但必须大声提醒。
+    if host not in ("127.0.0.1", "localhost", "::1") and not str(config.get("accessToken") or "").strip():
+        print(
+            f"⚠️  警告：绑定 {host} 且未设置 accessToken —— 财务数据将无鉴权地暴露在网络上！\n"
+            f"   请在 runtime/config.json 设置 accessToken，或改回 host=127.0.0.1。",
+            file=sys.stderr, flush=True,
+        )
     server = FinanceNodeServer((host, port), FinanceNodeHandler, config)
     print(f"Finance Node running on http://{host}:{port}", flush=True)
     try:
