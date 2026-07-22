@@ -25,7 +25,7 @@ import { TransactionDrawer } from "../components/TransactionDrawer";
 import { TransactionEditSheet } from "../components/TransactionEditSheet";
 import { api } from "../api/client";
 import { useApi } from "../lib/useApi";
-import { formatCurrency } from "../lib/format";
+import { formatCurrency, escapeHtml } from "../lib/format";
 import { useTimeRangeStore } from "../store/timeRange";
 import { useThemeStore } from "../store/theme";
 import { useDashboardLayoutStore, type DashboardWidgetId } from "../store/dashboardLayout";
@@ -83,7 +83,8 @@ export function OverviewPage() {
     [],
   );
   const { data: transactionData, loading: txLoading, error: txError, refresh: refreshTx } = useApi(
-    () => api.listTransactions({ limit: 3000 }),
+    // 报销总览扇形图"不随统计区间过滤"，须取全量，避免老垫付被 3000 截断漏统计。
+    () => api.listTransactions({ limit: 100000 }),
     [],
   );
   const currentMonth = useMemo(() => {
@@ -645,7 +646,7 @@ function ProjectBarChart({
         const budRev = expectedRevenue[idx] || 0;
         const costPercent = budCost > 0 ? `${((actualCost / budCost) * 100).toFixed(1)}%` : "—";
         const revPercent = budRev > 0 ? `${((actualRev / budRev) * 100).toFixed(1)}%` : "—";
-        return `<div style="font-weight:600;margin-bottom:4px">${name}</div>
+        return `<div style="font-weight:600;margin-bottom:4px">${escapeHtml(name)}</div>
           成本：¥${actualCost.toLocaleString()} / 预算 ¥${budCost.toLocaleString()} · ${costPercent}<br/>
           回款：¥${actualRev.toLocaleString()} / 期望 ¥${budRev.toLocaleString()} · ${revPercent}`;
       },

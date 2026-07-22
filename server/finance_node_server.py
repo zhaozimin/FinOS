@@ -9,6 +9,7 @@ from collections import defaultdict
 from contextlib import closing
 import base64
 import gzip
+import hmac
 import json
 import mimetypes
 import os
@@ -33,6 +34,9 @@ DB_PATH = RUNTIME_DIR / "finance.sqlite3"
 ATTACHMENTS_DIR = RUNTIME_DIR / "attachments"
 ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024  # 10 MB hard cap per file
 WEB_DIR = ROOT / "web"
+# 静态资源的唯一可读根：任何 _send_file 目标必须解析后仍落在此目录内，
+# 否则视为目录穿越（读 runtime/config.json 偷 token、下载整库、读任意文件）。
+WEB_ROOT = WEB_DIR.resolve()
 MUTATION_LOCK = threading.RLock()
 
 
@@ -450,7 +454,19 @@ def scrub_account_ref(account_id: object, valid_account_ids: set) -> str:
 #    并随审计事件落库存证。人类 UI 通道（dashboard/manual/import）不受影响。
 # ============================================================
 
-AGENT_TRANSACTION_SOURCES = {"openclaw"}
+# 人工/系统写入通道：仅这些 source 的交易豁免 AI 主数据护栏（它们只从 UI 下拉/
+# 系统流程引用已存在的主数据）。其余一切来源——agent / claude / gpt / openclaw /
+# 缺省 openClaw 等——都必须过引用校验（先问后写）。反转白名单，杜绝换个 source 就绕过。
+HUMAN_OR_SYSTEM_SOURCES = {"manual", "dashboard", "adjustment", "recurring"}
+
+
+def source_requires_guardrail(source: object) -> bool:
+    s = str(source or "").strip().lower()
+    if not s:
+        return True  # 缺省即当作 agent，强制校验
+    if s == "import" or s.startswith("import-"):
+        return False  # 账单导入是系统批量写入
+    return s not in HUMAN_OR_SYSTEM_SOURCES
 
 # 内部流程写入、不属于用户类别配置的系统类别（如余额调整审计交易）
 INTERNAL_CATEGORY_NAMES = {"余额调整"}
@@ -478,7 +494,7 @@ def validate_agent_transaction_refs(
 ) -> Optional[dict]:
     """openClaw 交易的引用校验；PUT 更新只查相对原记录变化的字段，不误伤存量编辑。
     返回 None = 通过；返回 dict = 应以 422 返回的结构化错误。"""
-    if str(row.get("source") or "").strip().lower() not in AGENT_TRANSACTION_SOURCES:
+    if not source_requires_guardrail(row.get("source")):
         return None
 
     registry = collect_master_registry(connection)
@@ -3068,9 +3084,20 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "Not found"})
 
     def log_message(self, format: str, *args) -> None:
-        sys.stdout.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), format % args))
+        # 剥离 query string 再落日志：附件直链等会带 ?token=，绝不能进明文日志。
+        line = format % args
+        if "?" in line:
+            line = " ".join(seg.split("?", 1)[0] for seg in line.split(" "))
+        sys.stdout.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), line))
 
     def _handle_public_file(self, path: str) -> bool:
+        # 纵深防御：这些静态分支在鉴权之前执行，绝不接受任何含 ".." 的路径段，
+        # 否则可穿越到 runtime/ 读取 config.json（明文 token）与整个数据库。
+        # 真正的兜底防线是 _send_file 内的包含性校验。
+        if any(segment == ".." for segment in path.split("/")):
+            self._send_json(404, {"error": "Not found"})
+            return True
+
         if path == "/favicon.ico":
             self.send_response(204)
             self.send_header("Content-Length", "0")
@@ -3113,19 +3140,11 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
             return True
 
         authorization = self.headers.get("Authorization", "")
-        if authorization == f"Bearer {token}":
+        if authorization.startswith("Bearer ") and hmac.compare_digest(authorization[7:], token):
             return True
 
-        # 1.6 附件直链：<img src="/v1/attachments/{id}?token=..."> 无法发 header，
-        # 走 URL query 兜底
-        try:
-            query = parse_qs(urlparse(self.path).query)
-            url_token = (query.get("token", [None])[0] or "").strip()
-            if url_token == token:
-                return True
-        except Exception:
-            pass
-
+        # 附件已改为前端用 Authorization 头拉 Blob（见 api/client.fetchAttachmentBlob），
+        # 故彻底移除 ?token= URL 兜底——token 不再出现在任何 URL，杜绝泄漏到历史/日志/Referer。
         self._send_json(401, {"error": "Unauthorized"})
         return False
 
@@ -3890,6 +3909,9 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
         # （那是初始基线），而是写一条补差交易。
         existing_account_payloads: dict = {}
         adjustment_pending: list = []
+        # 账户重命名传播：交易按账户名快照引用，改名后必须把历史交易的三列同步改名，
+        # 否则历史交易从余额计算中被孤立（[审计:account-rename]）。
+        account_renames: list = []
         with closing(connect_db()) as _peek:
             for row in _peek.execute("SELECT id, payload_json FROM accounts").fetchall():
                 try:
@@ -3914,10 +3936,16 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
                 # 前端"当前余额"输入框绑定 payload.currentBalance；若与
                 # 系统已计算出的 currentBalance 不同 → 写一条 adjustment 交易。
                 opening_to_persist = float(old_payload.get("openingBalance", 0.0))
+                # 若改了名，历史交易此刻仍挂在旧名下——余额必须按旧名查，
+                # 否则查新名得 0、误判为"余额被清空"而生成虚假调整交易。
+                old_name = str(old_payload.get("name") or "").strip()
+                if old_name and old_name != account_name:
+                    account_renames.append((old_name, account_name))
+                balance_lookup_name = old_name or account_name
                 if "currentBalance" in item:
                     intended_current = coerce_float(item.get("currentBalance"), 0.0)
                     with closing(connect_db()) as _calc:
-                        current_now = current_balance_for_account(_calc, account_name, opening_to_persist)
+                        current_now = current_balance_for_account(_calc, balance_lookup_name, opening_to_persist)
                     delta = intended_current - current_now
                     if abs(delta) > 0.005:
                         adjustment_pending.append({
@@ -4047,6 +4075,22 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
                     now,
                 ),
             )
+
+            # 账户重命名传播：先把历史交易的三列从旧名改到新名，历史交易随账户一起走。
+            # 放在余额调整写入之前——调整交易用的是新名，改名后二者一致落到同一账户。
+            for old_name, new_name in account_renames:
+                connection.execute(
+                    "UPDATE transactions SET account_name = ?, updated_at = ? WHERE account_name = ?",
+                    (new_name, now, old_name),
+                )
+                connection.execute(
+                    "UPDATE transactions SET from_account_name = ?, updated_at = ? WHERE from_account_name = ?",
+                    (new_name, now, old_name),
+                )
+                connection.execute(
+                    "UPDATE transactions SET to_account_name = ?, updated_at = ? WHERE to_account_name = ?",
+                    (new_name, now, old_name),
+                )
 
             # 2.6 写入排队的余额调整交易（让黑洞资金可追溯）
             for adj in adjustment_pending:
@@ -4218,10 +4262,23 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
                 if cursor.rowcount == 0:
                     self._send_json(409, {"error": "Transaction is already deleted"})
                     return
+                # 删除的是报销回款收入 → 级联把它名下已核销的垫付退回待报销，
+                # 否则留下指向已删除收入的悬空 reimbursed_by（幽灵“已报销”）。
+                cascaded = 0
+                if transaction.get("kind") == "income":
+                    cascade_cursor = connection.execute(
+                        """
+                        UPDATE transactions
+                        SET reimbursement_status = 'draft', reimbursed_by = NULL, updated_at = ?
+                        WHERE reimbursed_by = ? AND deleted_at IS NULL
+                        """,
+                        (now, transaction_id),
+                    )
+                    cascaded = cascade_cursor.rowcount
                 event = {
                     "id": operation_id, "occurredAt": now, "actor": actor, "action": "delete",
                     "entityType": "transaction", "entityId": transaction_id, "entityName": transaction["title"],
-                    "impact": {"amount": transaction["amount"], "kind": transaction["kind"], "accountName": transaction["accountName"]},
+                    "impact": {"amount": transaction["amount"], "kind": transaction["kind"], "accountName": transaction["accountName"], "reimbursementsUnsettled": cascaded},
                     "payload": {"before": transaction},
                 }
                 append_audit_event(connection, event)
@@ -4463,6 +4520,16 @@ class FinanceNodeHandler(BaseHTTPRequestHandler):
             json.dump(self.server.config, file, ensure_ascii=False, indent=2)
 
     def _send_file(self, path: Path) -> None:
+        # 兜底防线：目标解析后必须仍在 WEB_ROOT 内，杜绝目录穿越。
+        # 无条件生效（即便未设 accessToken），保护 SSH 私钥、其它库、config.json 等。
+        try:
+            resolved = path.resolve()
+            resolved.relative_to(WEB_ROOT)
+        except (ValueError, OSError):
+            self._send_json(404, {"error": "Not found"})
+            return
+        path = resolved
+
         if not path.exists() or not path.is_file():
             self._send_json(404, {"error": "Not found"})
             return
@@ -4548,7 +4615,7 @@ def main() -> None:
     except Exception as exc:
         print(f"[rates] startup fetch failed: {exc}", flush=True)
 
-    host = config.get("host", "0.0.0.0")
+    host = config.get("host", "127.0.0.1")
     port = int(config.get("port", 31888))
     server = FinanceNodeServer((host, port), FinanceNodeHandler, config)
     print(f"Finance Node running on http://{host}:{port}", flush=True)

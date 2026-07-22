@@ -2,6 +2,7 @@ import type { EChartsOption } from "echarts";
 import { EChart } from "./EChart";
 import { getPalette } from "./theme";
 import { useThemeStore } from "../../store/theme";
+import { escapeHtml } from "../../lib/format";
 
 interface Props {
   data: Array<{ name: string; amount: number; color?: string }>;
@@ -44,7 +45,7 @@ export function AccountBarChart({ data, height = 320 }: Props) {
         const arr = Array.isArray(params) ? params : [params];
         const item = arr[0];
         const value = Number(item?.value || 0);
-        return `${item?.name}<br/><b>¥${value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}</b>`;
+        return `${escapeHtml(item?.name)}<br/><b>¥${value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}</b>`;
       }) as any,
     },
     series: [

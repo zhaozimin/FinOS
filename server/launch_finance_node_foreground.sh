@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PID_PATH="$ROOT_DIR/runtime/finance-node.pid"
-PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
+PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || echo /usr/bin/python3)}"
 
 mkdir -p "$ROOT_DIR/runtime" "$ROOT_DIR/logs"
 

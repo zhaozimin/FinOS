@@ -218,10 +218,17 @@ export const api = {
     return url;
   },
 
-  /** 1.6 附件 */
-  attachmentUrl(id: string): string {
+  /** 1.6 附件：用 Authorization 头取 Blob，绝不把 token 放进 URL（防泄漏到历史/日志/Referer）。 */
+  async fetchAttachmentBlob(id: string): Promise<Blob> {
     const token = getToken();
-    return buildUrl(`/v1/attachments/${encodeURIComponent(id)}`, token ? { token } : undefined);
+    const response = await fetch(buildUrl(`/v1/attachments/${encodeURIComponent(id)}`), {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw new ApiError(response.status, `Attachment fetch failed (${response.status})`);
+    }
+    return response.blob();
   },
 
   async uploadAttachment(transactionId: string, file: File): Promise<import("../types").AttachmentRef> {

@@ -2,6 +2,7 @@ import type { EChartsOption } from "echarts";
 import { EChart } from "./EChart";
 import { getPalette } from "./theme";
 import { useThemeStore } from "../../store/theme";
+import { escapeHtml } from "../../lib/format";
 import type { SunburstNode } from "../../types";
 
 interface Props {
@@ -29,7 +30,7 @@ export function SunburstChart({ data, height = 360 }: Props) {
             .slice(1)
             .join(" / ") || params.name;
         const value = Number(params.value || 0);
-        return `${path}<br/><b>¥${value.toLocaleString("zh-CN", { maximumFractionDigits: 0 })}</b>`;
+        return `${escapeHtml(path)}<br/><b>¥${value.toLocaleString("zh-CN", { maximumFractionDigits: 0 })}</b>`;
       }) as any,
     },
     series: [

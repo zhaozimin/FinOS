@@ -2,7 +2,7 @@
   "_comment": "复制此文件为 runtime/config.json 后修改 — 该文件包含敏感信息，不要提交到 git。",
 
   "nodeName": "我的财务节点",
-  "host": "0.0.0.0",
+  "host": "127.0.0.1",
   "port": 31889,
 
   "_accessToken_help": "强烈建议改成 32 位以上的随机字符串。可用：python3 -c \"import secrets; print(secrets.token_urlsafe(32))\"",

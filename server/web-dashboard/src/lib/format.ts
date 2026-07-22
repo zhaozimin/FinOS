@@ -1,3 +1,15 @@
+/**
+ * HTML 转义 — 用户数据（账户名/商户/项目/分类名等）进入 ECharts tooltip 的
+ * HTML 字符串前必须转义，否则构成存储型 XSS（可窃取 localStorage 里的 token）。
+ * ECharts tooltip 默认以 innerHTML 渲染 formatter 返回值。
+ */
+const HTML_ESCAPE: Record<string, string> = {
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+};
+export function escapeHtml(value: unknown): string {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => HTML_ESCAPE[c]);
+}
+
 /** 货币格式 — 永远写完整数字，不做缩位（财务克制原则）。 */
 export function formatCurrency(value: number, opts: { withSign?: boolean } = {}): string {
   if (!Number.isFinite(value)) return "—";

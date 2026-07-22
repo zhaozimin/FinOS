@@ -75,18 +75,18 @@ export function TokenGate({ onAuthenticated }: Props) {
       <main className="relative z-10 flex min-h-screen items-center justify-center px-5 pb-12 pt-[60px]">
         <div className="flex w-full max-w-[440px] flex-col items-center">
           <div
-            className="h-[180px] w-[180px] overflow-hidden rounded-full border border-white/35"
+            className="flex h-[180px] w-[180px] items-center justify-center overflow-hidden rounded-full border border-white/35"
             style={{
+              background: "radial-gradient(circle at 50% 38%, #26251f 0%, #121210 72%)",
               boxShadow:
                 "0 24px 80px rgba(0,0,0,0.55), 0 0 0 6px rgba(255,255,255,0.04)",
             }}
           >
-            <img
-              src="/avatar.jpg"
-              alt="头像"
-              className="h-full w-full object-cover"
-              draggable={false}
-            />
+            {/* 中性品牌标记，不含任何真实个人信息（公开发布） */}
+            <svg width="96" height="96" viewBox="0 0 96 96" fill="none" aria-label="FinOS" role="img">
+              <circle cx="48" cy="48" r="46" stroke="rgba(255,255,255,0.14)" strokeWidth="1.5" />
+              <path d="M34 30h30M34 48h22M34 66h14" stroke="var(--brand-red)" strokeWidth="6" strokeLinecap="round" />
+            </svg>
           </div>
 
           <p

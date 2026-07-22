@@ -17,6 +17,7 @@ import { TextInput } from "../components/ui/TextInput";
 import { TransactionEditSheet } from "../components/TransactionEditSheet";
 import { AttachmentLightbox } from "../components/AttachmentLightbox";
 import { ReimbursementSettleSheet } from "../components/ReimbursementSettleSheet";
+import { AlertDialog } from "../components/ui/AlertDialog";
 import { ReimbursementActions, ReimbursementStatusTag, SettlePill } from "../components/ReimbursementPill";
 import type { AttachmentRef } from "../types";
 import { api } from "../api/client";
@@ -74,6 +75,7 @@ export function LedgerPage() {
   const [reimbFilter, setReimbFilter] = useState<ReimbFilter>("pending");
   const [settleIncome, setSettleIncome] = useState<Transaction | null>(null);
   const [quickBusyId, setQuickBusyId] = useState<string | null>(null);
+  const [quickError, setQuickError] = useState<string | null>(null);
 
   const [editTarget, setEditTarget] = useState<Transaction | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -90,7 +92,9 @@ export function LedgerPage() {
 
   const { data: configuration } = useApi(() => api.configuration(), []);
   const { data: transactionData, loading, refresh } = useApi(
-    () => api.listTransactions({ limit: 3000, includeDeleted: 1 }),
+    // 报销 tab 声称"扫全历史"，故取全量（服务端按最近排序，limit 是尾部切片）——
+    // 用足够高的上限覆盖任何现实个人账本，避免老垫付被 3000 静默截断而漏报待回款。
+    () => api.listTransactions({ limit: 100000, includeDeleted: 1 }),
     [],
   );
   const currentMonth = useMemo(() => {
@@ -179,6 +183,8 @@ export function LedgerPage() {
     try {
       await api.updateReimbursement(tx.id, next);
       refresh();
+    } catch (err) {
+      setQuickError(err instanceof Error ? err.message : "报销状态更新失败，请重试");
     } finally {
       setQuickBusyId(null);
     }
@@ -490,6 +496,14 @@ export function LedgerPage() {
           setSettleIncome(null);
           refresh();
         }}
+      />
+
+      <AlertDialog
+        open={quickError !== null}
+        title="操作失败"
+        description={quickError}
+        confirmLabel="知道了"
+        onConfirm={() => setQuickError(null)}
       />
     </div>
   );

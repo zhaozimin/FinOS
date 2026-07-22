@@ -180,7 +180,7 @@
 | `fromAccountName` | string \| null | transfer 必填（转出） |
 | `toAccountName` | string \| null | transfer 必填（转入） |
 | `merchant` | string | 商户 / 对方名 |
-| `category` | `{id?, name}` | 分类对象。建议 name 匹配现有分类，否则自动创建 |
+| `category` | `{id?, name}` | 分类对象。name 须匹配现有分类；**不会自动创建**——引用不存在的分类，服务端返回 422（附 valid 清单），须先经用户确认再用 `finance_manage_master_data` 新建 |
 | `projectName` | string \| null | 项目名（必须与 settings.projects[].name 一致） |
 | `counterpartyId` | string \| null | 对手方 ID（先 GET /v1/configuration 拿） |
 | `tags` | string[] | 自由标签 |

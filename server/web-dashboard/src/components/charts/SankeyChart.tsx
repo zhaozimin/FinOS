@@ -2,6 +2,7 @@ import type { EChartsOption } from "echarts";
 import { EChart } from "./EChart";
 import { getPalette, getSeriesPalette } from "./theme";
 import { useThemeStore } from "../../store/theme";
+import { escapeHtml } from "../../lib/format";
 import type { SankeyLink, SankeyNode } from "../../types";
 
 export type SankeySelection =
@@ -57,9 +58,9 @@ export function SankeyChart({ nodes, links, height = 420, onSelect }: Props) {
       formatter: ((params: any) => {
         if (params.dataType === "edge") {
           const value = Number(params.data?.value || 0);
-          return `${params.data?.source} → ${params.data?.target}<br/><b>¥${value.toLocaleString("zh-CN", { maximumFractionDigits: 0 })}</b>`;
+          return `${escapeHtml(params.data?.source)} → ${escapeHtml(params.data?.target)}<br/><b>¥${value.toLocaleString("zh-CN", { maximumFractionDigits: 0 })}</b>`;
         }
-        return params.data?.name || params.name || "";
+        return escapeHtml(params.data?.name || params.name || "");
       }) as any,
     },
     series: [

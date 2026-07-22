@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Trash2, X } from "lucide-react";
 import { api } from "../api/client";
+import { AuthedImage } from "./AuthedImage";
 import { useBodyScrollLock } from "../lib/useBodyScrollLock";
 import { AlertDialog } from "./ui/AlertDialog";
 import type { AttachmentRef } from "../types";
@@ -108,22 +109,29 @@ export function AttachmentLightbox({ open, attachments, initialIndex = 0, onClos
       {/* Image */}
       <div className="relative z-0 flex max-h-full max-w-full items-center justify-center px-12 py-16">
         {current.mime?.startsWith("image/") ? (
-          <img
-            src={api.attachmentUrl(current.id)}
+          <AuthedImage
+            id={current.id}
             alt={current.originalName}
             className="max-h-[85vh] max-w-[85vw] object-contain shadow-2xl"
-            draggable={false}
           />
         ) : (
           <div className="flex flex-col items-center gap-3 rounded-lg bg-white/10 px-8 py-10 text-white">
             <span className="text-[14px]">无法在此预览此类附件</span>
-            <a
-              href={api.attachmentUrl(current.id)}
-              download={current.originalName}
+            <button
+              type="button"
+              onClick={async () => {
+                const blob = await api.fetchAttachmentBlob(current.id);
+                const objUrl = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = objUrl;
+                a.download = current.originalName;
+                a.click();
+                URL.revokeObjectURL(objUrl);
+              }}
               className="text-[13px] underline underline-offset-4"
             >
               下载 {current.originalName}
-            </a>
+            </button>
           </div>
         )}
       </div>

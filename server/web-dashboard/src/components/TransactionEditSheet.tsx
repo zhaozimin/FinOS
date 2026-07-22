@@ -7,6 +7,7 @@ import { CategoryTabs } from "./ui/Tabs";
 import { Badge } from "./ui/Badge";
 import { Modal } from "./ui/Modal";
 import { AttachmentLightbox } from "./AttachmentLightbox";
+import { AuthedImage } from "./AuthedImage";
 import { api } from "../api/client";
 import { useApi } from "../lib/useApi";
 import type { AttachmentRef, RecurringFrequency, ReimbursementStatus, TaxCategory, Transaction, TransactionKind } from "../types";
@@ -426,11 +427,10 @@ export function TransactionEditSheet({ open, onClose, onSaved, onDeleted, initia
                   title={att.originalName}
                 >
                   {att.mime?.startsWith("image/") ? (
-                    <img
-                      src={api.attachmentUrl(att.id)}
+                    <AuthedImage
+                      id={att.id}
                       alt={att.originalName}
                       className="h-full w-full object-cover"
-                      draggable={false}
                     />
                   ) : (
                     <span className="px-2 text-center text-[11px] text-muted-foreground">

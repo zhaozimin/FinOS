@@ -91,7 +91,9 @@ curl -X POST \
 全量覆盖（缺失字段保留原值）。
 
 ### `DELETE /v1/transactions/{id}`
-删除一笔交易（同时级联删除其附件物理文件）。
+软删除一笔交易：仅置 `deletedAt` 并记录操作者与原因，交易与其附件都保留、仍可审计，
+汇总/余额自动排除已删除项。若删除的是一笔报销回款收入，会级联把其名下已核销的垫付退回「待报销」。
+（可选 query：`?reason=...`，默认「删除流水」。）
 
 ### `PATCH /v1/transactions/{id}/reimbursement`
 仅更新报销状态。
@@ -265,7 +267,9 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 | 400 | 参数缺失 / 格式错（看 error 字段） |
 | 401 | token 无效 |
 | 404 | 资源不存在 |
+| 409 | 冲突（如交易已被删除） |
 | 413 | 上传文件超 10 MB |
+| 422 | AI 写入引用了不存在的账户/分类/来源/项目（返回 valid 可选清单），或主数据操作缺 userConfirmation |
 | 500 | 后端异常（看 server log） |
 | 503 | 缺依赖（如 openpyxl 没装） |
 
