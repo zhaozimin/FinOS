@@ -35,10 +35,12 @@
 ls server/finance_node_server.py 2>/dev/null && echo "源码已就位" || echo "未找到，需克隆"
 ```
 - **已就位** → `cd` 到含有 `server/` 的那一层目录，直接跳到第 2 步。
-- **未找到** → 从公开仓库克隆再进入：
+- **未找到** → 克隆到**当前目录**再进入（整套系统连数据都自包含在这一个文件夹里，
+  我看得见、删得掉；不要装到家目录或其他我看不到的地方）：
 ```
-git clone https://github.com/zhaozimin/FinOS.git ~/FinOS && cd ~/FinOS
+git clone https://github.com/zhaozimin/FinOS.git ./FinOS && cd FinOS
 ```
+> 若当前目录本身是 git 仓库，请往它的 `.gitignore` 追加一行 `FinOS/`，防止账本被误提交。
 
 ### 2. 安装唯一的 Python 依赖
 ```

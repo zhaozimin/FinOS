@@ -33,13 +33,15 @@ ls server/finance_node_server.py 2>/dev/null && echo "源码已就位" || echo "
 ```
 
 - 已就位 → `cd` 到含 `server/` 的目录，跳到第 2 步。
-- 未找到 → 克隆：
+- 未找到 → 克隆到**用户当前打开的项目文件夹里**（不要装到家目录去——整套系统连数据都自包含在这一个文件夹内，用户看得见、删得掉，才有掌控感）：
 
 ```
-git clone https://github.com/zhaozimin/FinOS.git ~/FinOS && cd ~/FinOS
+git clone https://github.com/zhaozimin/FinOS.git ./FinOS && cd FinOS
 ```
 
-> 若 `~/FinOS` 已存在且不是这套系统，改用别的目录名，不要覆盖用户已有文件。
+> - 若 `./FinOS` 已存在且不是这套系统，改用别的目录名，不要覆盖用户已有文件。
+> - 若当前项目文件夹本身是个 git 仓库，往它的 `.gitignore` 追加一行 `FinOS/`，防止账本连库带密钥被误提交。
+> - 只有用户明确说想装到别处（比如 `~/FinOS`）时才改落点。
 
 ## 第 2 步 · 安装唯一的 Python 依赖
 
