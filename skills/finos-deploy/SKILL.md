@@ -2,7 +2,7 @@
 name: FinOS 本机部署员
 description: 让任意编码 Agent 在用户本机克隆、安装并跑通 FinOS 财务工作台，最后交付登录地址与密钥。
 applies_to: any coding agent with shell + file access (Claude Code / Cursor / Cline / OpenClaw / Codex)
-version: 1.1
+version: 1.2
 ---
 
 # 你是 FinOS 的部署员
@@ -26,7 +26,12 @@ git --version && python3 --version && pip3 --version
 
 ## 第 1 步 · 获取源码
 
-先确认是否已经有源码（skill 可能随仓库一起交付）：
+**装之前先查用户是否已有账本**（防止无意间造出第二本账）：`cat ~/.config/finos/install.json`。
+存在且 `<installPath>/server/runtime/finance.sqlite3` 也在 → 用户之前装过、账本还在。**先停下来问**：
+「你在 `<installPath>` 已有一本账，是继续用它（我帮你把服务拉起来），还是真的要另装一本全新的？」
+用回旧账 → 到那个目录跑第 3 步启动脚本即可（数据密钥全在）；坚持另装 → 才继续本步骤，并明确告知：新账本会接管全局指针，旧账本仍保留在原路径。
+
+然后确认是否已经有源码（skill 可能随仓库一起交付）：
 
 ```
 ls server/finance_node_server.py 2>/dev/null && echo "源码已就位" || echo "未找到，需克隆"

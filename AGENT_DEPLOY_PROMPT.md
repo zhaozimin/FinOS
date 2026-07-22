@@ -30,6 +30,10 @@
 ## 步骤
 
 ### 1. 定位源码（你多半已经拿到了）
+装之前先 `cat ~/.config/finos/install.json`——若存在且其 `installPath` 下的
+`server/runtime/finance.sqlite3` 也存在，说明我之前装过、账本还在：**先问我**是用回旧账
+（到那个目录跑第 3 步启动即可）还是真的另装新的，不要不吭声就装出第二本账。
+
 你很可能**已经有这套源码**了 —— 就在当前目录，或审核方已经把整个文件夹交给了你。先确认：
 ```
 ls server/finance_node_server.py 2>/dev/null && echo "源码已就位" || echo "未找到，需克隆"
